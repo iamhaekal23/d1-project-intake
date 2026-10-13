@@ -1,0 +1,16 @@
+{
+  "projectId": "01924b1e-7f32-7a81-9b12-45e8a1234567",
+  "canonicalCode": "202601",
+  "projectName": "Implementasi Sistem ERP Cloud Anaheim Tahap 1",
+  "clientId": "PTANTRI",
+  "clientName": "PT Anaheim Nimbus Universal",
+  "amEmployeeId": "SDM-0012",
+  "pmEmployeeId": "SDM-0004",
+  "startDate": "2026-10-15",
+  "targetEndDate": "2027-04-15",
+  "documentsComplete": true,
+  "poReceived": false,
+  "status": "REGISTERED",
+  "createdAt": "2026-10-13T09:00:00+07:00",
+  "updatedAt": "2026-10-13T11:30:00+07:00"
+}

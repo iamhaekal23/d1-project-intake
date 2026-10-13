@@ -1,0 +1,7 @@
+{
+  "code": "PROJECT_NOT_FOUND",
+  "message": "Data proyek dengan ID 01924b1e-7f32-7a81-9b12-999999999999 tidak ditemukan di sistem intake",
+  "details": {
+    "requestedProjectId": "01924b1e-7f32-7a81-9b12-999999999999"
+  }
+}
