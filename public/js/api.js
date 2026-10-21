@@ -1,15 +1,16 @@
-// public/js/api.js - Service Panggilan REST API Modul D-1 & Mock Hulu
+// public/js/api.js - Panggilan REST API Modul D-1
 const API_BASE = '/api/v1';
 
 export const ProjectAPI = {
-  // 1. Ambil daftar proyek dari backend (untuk Dasbor UI-K01-01)
+  // Ambil daftar proyek kanonis (mendukung struktur pembungkus data & meta)
   async getProjects() {
-    const res = await fetch(`${API_BASE}/projects`);
+    const res = await fetch(`${API_BASE}/projects?page=1&limit=100`);
     if (!res.ok) throw new Error('Gagal mengambil daftar proyek');
-    return await res.json();
+    const result = await res.json();
+    return Array.isArray(result) ? result : (result.data || []);
   },
 
-  // 2. Registrasi draf proyek baru (API-K01-01)
+  // Simpan draf proyek baru
   async createProject(payload) {
     const res = await fetch(`${API_BASE}/projects`, {
       method: 'POST',
@@ -24,7 +25,7 @@ export const ProjectAPI = {
     return result;
   },
 
-  // 3. Ambil data master PM dari referensi SDM (F-2)
+  // Ambil data PM (dari adapter F-2)
   async getPMReferences() {
     const res = await fetch(`${API_BASE}/referensi/sdm`);
     if (!res.ok) throw new Error('Gagal memuat master PM');
@@ -32,7 +33,7 @@ export const ProjectAPI = {
     return data.items || [];
   },
 
-  // 4. Ambil master instansi klien dari CRM (F-6)
+  // Ambil data Klien (dari adapter F-6)
   async getClients() {
     const res = await fetch(`${API_BASE}/clients`);
     if (!res.ok) throw new Error('Gagal memuat master Klien');
@@ -40,7 +41,7 @@ export const ProjectAPI = {
     return data.data || [];
   },
 
-  // 5. Simpan draf klien mandiri sementara (ENT-K01-04)
+  // Tambah draf klien sementara (Q-09)
   async addTemporaryClient(companyName) {
     const res = await fetch(`${API_BASE}/temporary-clients`, {
       method: 'POST',

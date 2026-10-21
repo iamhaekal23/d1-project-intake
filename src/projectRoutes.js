@@ -1,24 +1,33 @@
-// src/projectRoutes.js - Kontrak API Resmi Modul D-1
+// src/projectRoutes.js - REST API Kanonis Modul D-1 (Freeze UTS v0.2.0)
 const express = require('express');
-const crypto = require('crypto');
 const router = express.Router();
-const { readDB, writeDB, generateNextCanonicalCode } = require('./database');
+const crypto = require('crypto');
+const { 
+  readDB, 
+  writeDB, 
+  getWIBTimestamp, 
+  generateNextCanonicalCode, 
+  toCanonicalProject 
+} = require('./database');
 
-// 1. API-K01-08: GET /api/v1/projects (Koleksi Proyek Berkemampuan Paging untuk E-2 & UI)
+// ============================================================================
+// 1. API-K01-08: KOLEKSI PROYEK KANONIS (PAGINASI 3 DATA & FILTER)
+// Digunakan oleh: Modul E-2 (Arus Kas), Modul E-1 (Dasbor), Antarmuka Web D-1
+// ============================================================================
 router.get('/projects', (req, res) => {
   const db = readDB();
   let list = db.projects || [];
 
   const { status, q } = req.query;
-  const page = parseInt(req.query.page, 10) || 1;
-  const limit = parseInt(req.query.limit, 10) || 3; // <-- UBAH KE 3 DATA PER PAGE
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit, 10) || 3); // Default 3 data per page
 
-  // Filter status operasional
-  if (status) {
+  // Filter berdasarkan status resmi proyek
+  if (status && status !== 'ALL') {
     list = list.filter(p => p.status === status);
   }
 
-  // Filter pencarian teks
+  // Filter pencarian teks bebas (nama proyek, kode kanonis, nama klien)
   if (q) {
     const keyword = q.toLowerCase();
     list = list.filter(p => 
@@ -31,147 +40,209 @@ router.get('/projects', (req, res) => {
   const total = list.length;
   const totalPages = Math.ceil(total / limit) || 1;
   const startIndex = (page - 1) * limit;
-  const paginatedData = list.slice(startIndex, startIndex + limit);
+  
+  // Format seluruh item sesuai kontrak kanonis
+  const paginatedProjects = list
+    .slice(startIndex, startIndex + limit)
+    .map(toCanonicalProject);
 
-  // Jika dipanggil oleh antarmuka lokal tanpa query paging, kembalikan array murni
-  if (!req.query.page && !req.query.limit && !req.query.status && !req.query.q) {
-    return res.json(list);
-  }
-
-  // Format respons resmi dengan paging
-  res.json({
-    data: paginatedData,
-    meta: { page, limit, total, totalPages }
+  // Mengembalikan struktur resmi ProjectListResponse
+  res.status(200).json({
+    data: paginatedProjects,
+    meta: {
+      page,
+      limit,
+      total,
+      totalPages
+    }
   });
 });
 
-// 2. API-K01-07: GET /api/v1/projects/:projectId (Detail Tunggal Kanonis Terpusat)
+// ============================================================================
+// 2. API-K01-07: DETAIL TUNGGAL PROYEK KANONIS (SINGLE SOURCE OF TRUTH)
+// Digunakan oleh: Modul E-2, E-3, E-5, D-3
+// ============================================================================
 router.get('/projects/:projectId', (req, res) => {
+  const { projectId } = req.params;
   const db = readDB();
-  const proj = db.projects.find(p => p.projectId === req.params.projectId || p.canonicalCode === req.params.projectId);
+  const list = db.projects || [];
 
-  if (!proj) {
+  // Mendukung pencarian via UUID v7 maupun nomor kanonis 6 digit (contoh: 202601)
+  const project = list.find(p => p.projectId === projectId || p.canonicalCode === projectId);
+
+  if (!project) {
     return res.status(404).json({
       code: "PROJECT_NOT_FOUND",
-      message: `Data proyek dengan ID ${req.params.projectId} tidak ditemukan di sistem intake`,
-      details: { requestedProjectId: req.params.projectId }
+      message: `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`,
+      details: {
+        requestedProjectId: projectId
+      }
     });
   }
 
-  // Payload kanonis resmi
-  res.json({
-    projectId: proj.projectId,
-    canonicalCode: proj.canonicalCode,
-    projectName: proj.projectName,
-    clientId: proj.clientId,
-    clientName: proj.clientName,
-    amEmployeeId: proj.amEmployeeId,
-    pmEmployeeId: proj.pmEmployeeId,
-    startDate: proj.startDate,
-    targetEndDate: proj.targetEndDate,
-    documentsComplete: proj.documentsComplete,
-    poReceived: proj.poReceived,
-    status: proj.status,
-    createdAt: proj.createdAt,
-    updatedAt: proj.updatedAt
-  });
+  // Kembalikan format ProjectCanonicalResponse (tanpa indicativeValue)
+  res.status(200).json(toCanonicalProject(project));
 });
 
-// 3. API-K01-01: POST /api/v1/projects (Registrasi Draf Proyek Baru)
+// ============================================================================
+// 3. API-K01-01: PENDAFTARAN DRAF PROYEK BARU
+// ============================================================================
 router.post('/projects', (req, res) => {
-  const { projectName, clientId, clientName, pmEmployeeId, pmName, startDate, targetEndDate, indicativeValue } = req.body;
+  const {
+    projectName,
+    clientId,
+    clientName,
+    pmEmployeeId,
+    pmName,
+    startDate,
+    targetEndDate,
+    indicativeValue
+  } = req.body;
 
-  // Validasi Aturan Bisnis Server-Side
-  const errors = {};
+  // Validasi Aturan Bisnis D-1
   if (!projectName || projectName.trim().length < 5) {
-    errors.projectName = "Nama proyek wajib diisi (minimal 5 karakter)";
-  }
-  if (!startDate) {
-    errors.startDate = "Estimasi tanggal mulai wajib ditentukan";
-  }
-  if (!targetEndDate) {
-    errors.targetEndDate = "Estimasi target selesai wajib ditentukan";
-  }
-  if (startDate && targetEndDate && new Date(targetEndDate) < new Date(startDate)) {
-    errors.targetEndDate = "Target tanggal selesai tidak boleh mendahului tanggal mulai proyek";
-  }
-  if (!pmEmployeeId) {
-    errors.pmEmployeeId = "Penunjukan PM pelaksana wajib dipilih";
-  }
-
-  if (Object.keys(errors).length > 0) {
     return res.status(400).json({
       code: "VALIDATION_ERROR",
-      message: "Data input registrasi proyek tidak valid",
-      details: errors
+      message: "Nama proyek wajib diisi minimal 5 karakter",
+      details: { field: "projectName" }
+    });
+  }
+
+  if (!startDate || !targetEndDate) {
+    return res.status(400).json({
+      code: "VALIDATION_ERROR",
+      message: "Estimasi tanggal mulai dan selesai wajib ditentukan",
+      details: { field: "dates" }
+    });
+  }
+
+  if (new Date(targetEndDate) < new Date(startDate)) {
+    return res.status(400).json({
+      code: "VALIDATION_ERROR",
+      message: "Target selesai tidak boleh mendahului tanggal mulai proyek",
+      details: { field: "targetEndDate" }
     });
   }
 
   const db = readDB();
+  db.projects = db.projects || [];
+
+  const nowWIB = getWIBTimestamp();
   const canonicalCode = generateNextCanonicalCode(db.projects);
-  const now = new Date().toISOString();
+  const projectId = crypto.randomUUID(); // Identitas UUID unik
 
   const newProject = {
-    projectId: `01924b1e-${Date.now().toString(16)}-7a81-9b12-${crypto.randomBytes(6).toString('hex')}`,
-    canonicalCode: canonicalCode,
+    projectId,
+    canonicalCode,
     projectName: projectName.trim(),
-    clientId: clientId || "PTANTRI",
-    clientName: clientName || "PT Anaheim Nimbus Universal",
-    amEmployeeId: "01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1",
-    amName: "Andi Maulana",
-    pmEmployeeId: pmEmployeeId,
-    pmName: pmName || "Budi Santoso, M.T.",
-    startDate: startDate,
-    targetEndDate: targetEndDate,
+    clientId: clientId || 'PTANTRI',
+    clientName: clientName || 'PT Anaheim Nimbus Universal',
+    amEmployeeId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1', // Sesi AM Andi Maulana
+    pmEmployeeId: pmEmployeeId || 'SDM-0004',
+    pmName: pmName || 'Budi Santoso, M.T.',
+    startDate,
+    targetEndDate,
     indicativeValue: Number(indicativeValue) || 0,
-    status: "DRAFT",
-    poReceived: false,
-    documentsComplete: false,
-    createdAt: now,
-    updatedAt: now
+    documentsComplete: true,
+    poReceived: false, // Wajib bernilai false saat pendaftaran awal (Q-01 & Q-07)
+    status: 'DRAFT',
+    createdAt: nowWIB,
+    updatedAt: nowWIB
   };
 
   db.projects.unshift(newProject);
-  db.project_audit_logs.push({
-    logId: `LOG-${Date.now()}`,
-    projectId: newProject.projectId,
-    actorId: "01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1",
-    action: "CREATE_DRAFT",
-    details: `Draf proyek terdaftar dengan kode kanonis ${canonicalCode}`,
-    timestamp: now
-  });
-
   writeDB(db);
 
   res.status(201).json({
-    message: `Draf proyek berhasil didaftarkan dengan Kode Kanonis ${canonicalCode}`,
+    message: "Draf proyek berhasil didaftarkan",
     data: newProject
   });
 });
 
-// 4. ENT-K01-04: POST /api/v1/temporary-clients (Draf Klien Sementara)
-router.post('/temporary-clients', (req, res) => {
-  const { companyName } = req.body;
-  if (!companyName || companyName.trim().length < 3) {
-    return res.status(400).json({ code: "VALIDATION_ERROR", message: "Nama instansi minimal 3 karakter" });
+// ============================================================================
+// 4. API-K01-04: PENGAJUAN SERAH TERIMA / HANDOVER KE PM
+// ============================================================================
+router.post('/projects/:projectId/handover', (req, res) => {
+  const { projectId } = req.params;
+  const db = readDB();
+  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
+
+  if (!project) {
+    return res.status(404).json({
+      code: "PROJECT_NOT_FOUND",
+      message: `Proyek ${projectId} tidak ditemukan`
+    });
+  }
+
+  project.status = 'UNDER_REVIEW';
+  project.updatedAt = getWIBTimestamp();
+  writeDB(db);
+
+  res.status(200).json({
+    message: "Proyek berhasil diajukan untuk review PM",
+    data: toCanonicalProject(project)
+  });
+});
+
+// ============================================================================
+// 5. API-K01-06: VERIFIKASI PERSETUJUAN PM (APPROVE -> REGISTERED)
+// ============================================================================
+router.post('/projects/:projectId/approve', (req, res) => {
+  const { projectId } = req.params;
+  const db = readDB();
+  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
+
+  if (!project) {
+    return res.status(404).json({
+      code: "PROJECT_NOT_FOUND",
+      message: `Proyek ${projectId} tidak ditemukan`
+    });
+  }
+
+  project.status = 'REGISTERED';
+  project.updatedAt = getWIBTimestamp();
+  writeDB(db);
+
+  res.status(200).json({
+    message: "Proyek disetujui dan berstatus REGISTERED",
+    data: toCanonicalProject(project)
+  });
+});
+
+// ============================================================================
+// 6. API-K01-05: PENOLAKAN SERAH TERIMA PM (REJECT -> REVISI_HANDOVER)
+// ============================================================================
+router.post('/projects/:projectId/reject', (req, res) => {
+  const { projectId } = req.params;
+  const { rejectionNotes } = req.body;
+
+  // Validasi Keputusan Mitra Q-04: Catatan penolakan PM wajib minimal 20 karakter
+  if (!rejectionNotes || rejectionNotes.trim().length < 20) {
+    return res.status(400).json({
+      code: "VALIDATION_ERROR",
+      message: "Catatan revisi PM wajib diisi minimal 20 karakter",
+      details: { field: "rejectionNotes" }
+    });
   }
 
   const db = readDB();
-  const tempClientId = `TEMP-${Date.now().toString().slice(-4)}`;
-  const newClient = {
-    tempClientId,
-    companyName: companyName.trim(),
-    syncStatus: "PENDING",
-    createdAt: new Date().toISOString()
-  };
+  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
 
-  db.temporary_clients.push(newClient);
+  if (!project) {
+    return res.status(404).json({
+      code: "PROJECT_NOT_FOUND",
+      message: `Proyek ${projectId} tidak ditemukan`
+    });
+  }
+
+  project.status = 'REVISI_HANDOVER';
+  project.rejectionNotes = rejectionNotes.trim();
+  project.updatedAt = getWIBTimestamp();
   writeDB(db);
 
-  res.status(201).json({
-    clientId: tempClientId,
-    name: `${companyName.trim()} (Draf Sementara)`,
-    status: "Aktif"
+  res.status(200).json({
+    message: "Serah terima proyek ditolak untuk revisi",
+    data: toCanonicalProject(project)
   });
 });
 
