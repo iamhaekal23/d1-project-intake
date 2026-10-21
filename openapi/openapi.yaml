@@ -1,122 +1,144 @@
 openapi: 3.0.3
 info:
   title: Modul D-1 - Registrasi Proyek dan Project Intake API
-  description: >
-    Spesifikasi OpenAPI Versi Awal untuk modul Registrasi Proyek dan Project Intake 
-    (ERP PT Anaheim Nimbus Universal). Menyediakan endpoint kanonis proyek terpusat 
-    (single source of truth) untuk dikonsumsi oleh modul komersial (E-2), baseline 
-    dan perencanaan (E-3), pengawasan risiko (E-5), dan penutupan proyek (D-3).
-  version: 0.1.0
+  description: >-
+    Spesifikasi Kontrak REST API Resmi untuk Modul Registrasi Proyek dan Project Intake (D-1), 
+    Enterprise Resource Planning (ERP) PT Anaheim Nimbus Universal. Modul ini bertindak sebagai 
+    Single Source of Truth (SSOT) data proyek kanonis bagi modul hilir (E-2, E-3, E-5, D-3).
+    Kontrak ini dibekukan (Freeze) untuk Asesmen Tengah Semester (UTS).
+  version: 0.2.0
   contact:
-    name: Tim Pengembang D-1 (Kelompok 1 - Kelas D)
-    email: dev-d1@anaheim.local
+    name: "Tim Pengembang Kelompok 1-D (Lead API: Fikri Lazuardi Fadilla)"
+    email: fikri@anaheim.local
 
 servers:
-  - url: http://127.0.0.1:4010
-    description: Lingkungan Mock Server Lokal (Prism)
   - url: http://localhost:3000/api/v1
-    description: Lingkungan Pengembangan Lokal
+    description: Server Aplikasi Lokal (Node.js Express)
+  - url: http://127.0.0.1:4010/api/v1
+    description: Mock Server Lokal (Prism CLI)
 
 security:
   - BearerAuth: []
 
 paths:
+  # ============================================================================
+  # API-K01-08: DAFTAR PROYEK KANONIS
+  # ============================================================================
+  /projects:
+    get:
+      summary: Mengambil daftar proyek kanonis terdaftar (Paging & Filter)
+      description: >-
+        Menyediakan koleksi data proyek kanonis dengan dukungan paginasi, pencarian nama/kode, 
+        dan filter status. Digunakan oleh modul penagihan komersial E-2 untuk menampilkan opsi 
+        proyek saat penyusunan kontrak/termin, serta oleh dasbor eksekutif E-1.
+      operationId: listProjects
+      tags:
+        - Proyek Kanonis
+      parameters:
+        - name: page
+          in: query
+          description: Nomor halaman data yang diminta (mulai dari 1).
+          required: false
+          schema:
+            type: integer
+            default: 1
+            minimum: 1
+          example: 1
+        - name: limit
+          in: query
+          description: Jumlah data per halaman.
+          required: false
+          schema:
+            type: integer
+            default: 10
+            minimum: 1
+            maximum: 100
+          example: 10
+        - name: status
+          in: query
+          description: Filter status siklus proyek.
+          required: false
+          schema:
+            type: string
+            enum:
+              - DRAFT
+              - UNDER_REVIEW
+              - REVISI_HANDOVER
+              - REGISTERED
+          example: REGISTERED
+        - name: q
+          in: query
+          description: Kata kunci pencarian berdasarkan nama proyek atau kode kanonis.
+          required: false
+          schema:
+            type: string
+          example: ERP Cloud
+      responses:
+        '200':
+          description: Daftar proyek kanonis berhasil diambil beserta metadata paginasi.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        '400':
+          description: Parameter kueri tidak valid.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '401':
+          description: Akses ditolak. Token autentikasi tidak disertakan atau kedaluwarsa.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
+  # ============================================================================
+  # API-K01-07: DETAIL TUNGGAL PROYEK KANONIS (Operasi Utama Konsumen Hilir)
+  # ============================================================================
   /projects/{projectId}:
     get:
-      summary: Ambil data proyek kanonis tunggal
-      description: >
-        Operasi utama (API-K01-07) untuk mengambil rincian data proyek kanonis terverifikasi. 
-        Penanda komersial poReceived digunakan oleh modul E-2 untuk mengunci atau mengizinkan 
-        penerbitan termin tagihan.
-      operationId: getCanonicalProjectById
+      summary: Mengambil rincian data tunggal proyek kanonis terpusat
+      description: >-
+        Mengembalikan metadata kanonis terverifikasi untuk satu proyek berdasarkan UUID v7 atau 
+        kode kanonis. Dikonsumsi oleh modul perencanaan teknis (E-3), penagihan invoice & termin (E-2), 
+        pengawasan risiko (E-5), evaluasi penutupan (D-3), dan finansial (E-1).
+      operationId: getProjectById
       tags:
         - Proyek Kanonis
       parameters:
         - name: projectId
           in: path
           required: true
-          description: Pengenal unik proyek berformat UUID v7 kanonis
+          description: Identifier unik proyek berupa string UUID v7 atau Kode Kanonis (YYYYXX).
           schema:
             type: string
-            format: uuid
-            example: "01924b1e-7f32-7a81-9b12-45e8a1234567"
+          example: 01924b1e-7f32-7a81-9b12-45e8a1234567
       responses:
         '200':
-          description: Data proyek kanonis berhasil ditemukan dan dikembalikan
+          description: Data proyek kanonis ditemukan dan disajikan secara lengkap.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectCanonicalResponse'
-              examples:
-                ProjectRegisteredSuccess:
-                  summary: Proyek terdaftar dengan penanda PO belum ada
-                  value:
-                    projectId: "01924b1e-7f32-7a81-9b12-45e8a1234567"
-                    canonicalCode: "202601"
-                    projectName: "Implementasi Sistem ERP Cloud Anaheim Tahap 1"
-                    clientId: "PTANTRI"
-                    clientName: "PT Anaheim Nimbus Universal"
-                    amEmployeeId: "SDM-0012"
-                    pmEmployeeId: "SDM-0004"
-                    startDate: "2026-10-15"
-                    targetEndDate: "2027-04-15"
-                    documentsComplete: true
-                    poReceived: false
-                    status: "REGISTERED"
-                    createdAt: "2026-10-13T09:00:00+07:00"
-                    updatedAt: "2026-10-13T11:30:00+07:00"
         '400':
-          description: Format parameter projectId tidak valid
+          description: Format identifier projectId pada path tidak valid.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                InvalidUUID:
-                  summary: Kesalahan sintaks ID
-                  value:
-                    code: "INVALID_PROJECT_ID_FORMAT"
-                    message: "Parameter projectId harus berupa UUID v7 yang sah"
-                    details:
-                      parameter: "projectId"
         '401':
-          description: Token autentikasi tidak disertakan atau telah kedaluwarsa
+          description: Akses ditolak. Token JWT F-1 tidak disertakan atau tidak valid.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                Unauthorized:
-                  summary: Token tidak sah
-                  value:
-                    code: "UNAUTHORIZED"
-                    message: "Token autentikasi tidak ditemukan atau telah kedaluwarsa"
-        '403':
-          description: Peran pengguna tidak memiliki hak akses membaca data proyek
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                Forbidden:
-                  summary: Akses ditolak
-                  value:
-                    code: "FORBIDDEN"
-                    message: "Akun tidak memiliki izin untuk mengakses resource proyek ini"
         '404':
-          description: Data proyek tidak ditemukan di sistem intake
+          description: Proyek dengan ID atau kode tersebut tidak terdaftar di sistem intake.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
-              examples:
-                NotFound:
-                  summary: Proyek tidak ditemukan
-                  value:
-                    code: "PROJECT_NOT_FOUND"
-                    message: "Data proyek dengan ID 01924b1e-7f32-7a81-9b12-999999999999 tidak ditemukan di sistem intake"
-                    details:
-                      requestedProjectId: "01924b1e-7f32-7a81-9b12-999999999999"
 
 components:
   securitySchemes:
@@ -124,24 +146,11 @@ components:
       type: http
       scheme: bearer
       bearerFormat: JWT
-      description: >
-        Token Bearer JWT diterbitkan oleh modul F-1 (Identitas & Hak Akses) 
-        melalui endpoint POST /api/v1/auth/login.
+      description: "Token autentikasi JWT resmi yang diterbitkan oleh modul Identitas & Akun (F-1)."
 
   schemas:
-    ProjectStatusEnum:
-      type: string
-      description: Siklus hidup status resmi proyek intake
-      enum:
-        - DRAFT
-        - UNDER_REVIEW
-        - REVISI_HANDOVER
-        - REGISTERED
-      example: "REGISTERED"
-
     ProjectCanonicalResponse:
       type: object
-      description: Skema data proyek kanonis terpusat untuk modul konsumen
       required:
         - projectId
         - canonicalCode
@@ -161,66 +170,110 @@ components:
         projectId:
           type: string
           format: uuid
-          description: Primary Key unik proyek (UUID v7 diterbitkan D-1)
-          example: "01924b1e-7f32-7a81-9b12-45e8a1234567"
+          description: Primary Key unik proyek yang diterbitkan sistem intake D-1 (format UUID v7).
+          example: 01924b1e-7f32-7a81-9b12-45e8a1234567
         canonicalCode:
           type: string
           pattern: '^[0-9]{6}$'
-          description: Kode unik kanonis format tahunan YYYYXX (contoh 202601)
+          description: Nomor proyek kanonis resmi format tahunan YYYYXX (contoh 202601).
           example: "202601"
         projectName:
           type: string
-          minLength: 5
-          maxLength: 150
-          description: Nama resmi paket proyek
-          example: "Implementasi Sistem ERP Cloud Anaheim Tahap 1"
+          description: Nama paket inisiasi proyek resmi.
+          example: Implementasi Sistem ERP Cloud Anaheim Tahap 1
         clientId:
           type: string
-          description: Kode klien resmi dari CRM F-6 atau ID penampung draf sementara
-          example: "PTANTRI"
+          description: Kode referensi instansi klien dari modul CRM F-6 (atau ID draf sementara).
+          example: PTANTRI
         clientName:
           type: string
-          description: Nama instansi perusahaan klien pemesan
-          example: "PT Anaheim Nimbus Universal"
+          description: Nama lengkap perusahaan atau instansi klien pemesan.
+          example: PT Anaheim Nimbus Universal
         amEmployeeId:
           type: string
-          description: Referensi identitas karyawan Account Manager dari modul F-2
-          example: "SDM-0012"
+          description: Referensi ID penanggung jawab Account Manager (dari modul F-1 / F-2).
+          example: 01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1
         pmEmployeeId:
           type: string
-          description: Referensi identitas karyawan Project Manager dari modul F-2
-          example: "SDM-0004"
+          description: Referensi ID pegawai Project Manager yang ditunjuk (dari modul SDM F-2).
+          example: SDM-0004
         startDate:
           type: string
           format: date
-          description: Estimasi tanggal mulai administratif (ISO 8601 YYYY-MM-DD)
+          description: Estimasi tanggal mulai administratif (ISO 8601 YYYY-MM-DD).
           example: "2026-10-15"
         targetEndDate:
           type: string
           format: date
-          description: Estimasi target tanggal selesai administratif (ISO 8601 YYYY-MM-DD)
+          description: Estimasi target tanggal selesai administratif (ISO 8601 YYYY-MM-DD).
           example: "2027-04-15"
         documentsComplete:
           type: boolean
-          description: Penanda sakelar (toggle) kelengkapan berkas acuan kerja WI-01
+          description: Nilai sakelar (toggle switch) kelengkapan dokumen acuan kerja WI-01.
           example: true
         poReceived:
           type: boolean
-          description: >
-            Flag ketersediaan fisik PO. Jika false, modul E-2 memblokir penerbitan termin tagihan.
+          description: >-
+            Flag ketersediaan dokumen fisik Purchase Order (PO). Jika bernilai false, 
+            modul komersial E-2 mengunci penerbitan termin tagihan secara otomatis.
           example: false
         status:
-          $ref: '#/components/schemas/ProjectStatusEnum'
+          type: string
+          enum:
+            - DRAFT
+            - UNDER_REVIEW
+            - REVISI_HANDOVER
+            - REGISTERED
+          description: Siklus hidup status proyek.
+          example: REGISTERED
         createdAt:
           type: string
           format: date-time
-          description: Waktu pencatatan sistem (ISO 8601 UTC+7 / WIB)
+          description: Waktu inisiasi draf proyek dalam format ISO 8601 dengan zona WIB (+07:00).
           example: "2026-10-13T09:00:00+07:00"
         updatedAt:
           type: string
           format: date-time
-          description: Waktu perubahan terakhir (ISO 8601 UTC+7 / WIB)
+          description: Waktu terakhir data diperbarui dengan zona WIB (+07:00).
           example: "2026-10-13T11:30:00+07:00"
+
+    PaginationMeta:
+      type: object
+      required:
+        - page
+        - limit
+        - total
+        - totalPages
+      properties:
+        page:
+          type: integer
+          description: Halaman data aktif saat ini.
+          example: 1
+        limit:
+          type: integer
+          description: Batas jumlah data yang ditampilkan per halaman.
+          example: 10
+        total:
+          type: integer
+          description: Total keseluruhan data proyek yang cocok dengan filter.
+          example: 20
+        totalPages:
+          type: integer
+          description: Total jumlah halaman yang tersedia.
+          example: 2
+
+    ProjectListResponse:
+      type: object
+      required:
+        - data
+        - meta
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/ProjectCanonicalResponse'
+        meta:
+          $ref: '#/components/schemas/PaginationMeta'
 
     ErrorResponse:
       type: object
@@ -230,13 +283,13 @@ components:
       properties:
         code:
           type: string
-          description: Kode klasifikasi error teknis
-          example: "PROJECT_NOT_FOUND"
+          description: Kode error standar sistem.
+          example: PROJECT_NOT_FOUND
         message:
           type: string
-          description: Pesan penjelasan human-readable
-          example: "Data proyek dengan ID tersebut tidak ditemukan di sistem intake"
+          description: Deskripsi pesan kesalahan yang dapat dibaca manusia.
+          example: Data proyek dengan ID tersebut tidak ditemukan di sistem intake
         details:
           type: object
-          description: Objek detail konteks kesalahan tambahan
+          description: Informasi teknis tambahan mengenai kesalahan.
           additionalProperties: true

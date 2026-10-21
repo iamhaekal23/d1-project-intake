@@ -1,15 +1,12 @@
 # Modul D-1: Registrasi Proyek dan Project Intake
-**Enterprise Resource Planning (ERP) PT Anaheim Nimbus Universal**  
-*Kelompok 1 / Kelas D*
+ERP PT Anaheim Nimbus Universal - Kelompok 1-D
 
-Repositori ini memuat spesifikasi OpenAPI v0.1, contoh respons JSON, dan panduan pengujian mock server untuk modul Project Intake (D-1).
+## Cara Menjalankan Aplikasi
+1. Pasang dependensi: `npm install`
+2. Muat data awal: `npm run db:seed`
+3. Jalankan server: `npm start`
+4. Buka di peramban: `http://localhost:3000`
 
-## Struktur Repositori
-- `openapi/openapi.yaml` : Kontrak OpenAPI 3.0.3 untuk endpoint data kanonis proyek.
-- `examples/` : Fixture respons JSON fiktif (HTTP 200 OK dan HTTP 404 Not Found).
-
-## Menjalankan Mock Server (Prism)
-1. Pastikan runtime Node.js (v18+) terpasang.
-2. Jalankan mock server:
-   ```bash
-   npx @stoplight/prism-cli mock openapi/openapi.yaml
+## Bukti Pengujian Demo
+Tangkapan layar demo tersimpan di folder:
+`docs/evidence/pertemuan-4/`
