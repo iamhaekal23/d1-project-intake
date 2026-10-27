@@ -1,7 +1,8 @@
 // src/mockService.js - Smart Integration Adapter (F-1, F-2, F-6)
 const express = require('express');
 const router = express.Router();
-const { readDB, writeDB } = require('./database');
+const prisma = require('./prisma');
+const asyncHandler = require('./asyncHandler');
 
 // Baca konfigurasi URL peladen mitra dari environment variable
 const F1_BASE = process.env.F1_API_URL || '';
@@ -116,9 +117,9 @@ router.get('/employees', handleF2Employees);
 // ============================================================================
 // 3. INTEGRASI F-6: MASTER CRM KLIEN (API-KF6-01 & API-KF6-02)
 // ============================================================================
-router.get('/clients', async (req, res) => {
-  const db = readDB();
-  const tempClients = (db.temporary_clients || []).map(tc => ({
+router.get('/clients', asyncHandler(async (req, res) => {
+  const temporaryClients = await prisma.temporaryClient.findMany();
+  const tempClients = temporaryClients.map(tc => ({
     clientId: tc.tempClientId,
     code: tc.tempClientId,
     name: `${tc.companyName} (Sementara)`,
@@ -154,34 +155,38 @@ router.get('/clients', async (req, res) => {
   res.json({
     data: [...fallbackClients, ...tempClients]
   });
-});
+}));
 
 // Penampung Draf Klien Sementara (Mitigasi Q-09)
-router.post('/temporary-clients', (req, res) => {
+router.post('/temporary-clients', asyncHandler(async (req, res) => {
   const { companyName } = req.body;
-  if (!companyName || companyName.trim().length < 3) {
+  if (typeof companyName !== 'string' || companyName.trim().length < 3) {
     return res.status(400).json({
       error: 'Nama instansi klien sementara minimal 3 karakter'
     });
   }
 
-  const db = readDB();
-  db.temporary_clients = db.temporary_clients || [];
-
-  const tempClientId = `TEMP-${Date.now().toString().slice(-4)}`;
-  const newClient = {
-    tempClientId,
-    companyName: companyName.trim(),
-    createdAt: new Date().toISOString()
-  };
-
-  db.temporary_clients.push(newClient);
-  writeDB(db);
+  let newClient;
+  for (let attempt = 0; attempt < 10; attempt++) {
+    const tempClientId = `TEMP-${(Date.now() + attempt).toString().slice(-4)}`;
+    try {
+      newClient = await prisma.temporaryClient.create({
+        data: {
+          tempClientId,
+          companyName: companyName.trim(),
+          syncStatus: 'PENDING'
+        }
+      });
+      break;
+    } catch (error) {
+      if (error.code !== 'P2002' || attempt === 9) throw error;
+    }
+  }
 
   res.status(201).json({
-    clientId: tempClientId,
+    clientId: newClient.tempClientId,
     name: `${companyName.trim()} (Sementara)`
   });
-});
+}));
 
 module.exports = router;

@@ -1,93 +1,110 @@
-// src/projectRoutes.js - REST API Kanonis Modul D-1 (Freeze UTS v0.2.0)
 const express = require('express');
 const router = express.Router();
-const crypto = require('crypto');
-const { 
-  readDB, 
-  writeDB, 
-  getWIBTimestamp, 
-  generateNextCanonicalCode, 
-  toCanonicalProject 
+const prisma = require('./prisma');
+const asyncHandler = require('./asyncHandler');
+const {
+  assertProjectStatus,
+  generateNextCanonicalCode,
+  getWIBTimestamp,
+  toCanonicalProject,
+  uuidv7
 } = require('./database');
 
-// ============================================================================
-// 1. API-K01-08: KOLEKSI PROYEK KANONIS (PAGINASI 3 DATA & FILTER)
-// Digunakan oleh: Modul E-2 (Arus Kas), Modul E-1 (Dasbor), Antarmuka Web D-1
-// ============================================================================
-router.get('/projects', (req, res) => {
-  const db = readDB();
-  let list = db.projects || [];
+const ACTOR_USER_ID = '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1';
 
-  const { status, q } = req.query;
-  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
-  const limit = Math.max(1, parseInt(req.query.limit, 10) || 3); // Default 3 data per page
+function findProjectWhere(projectId) {
+  return {
+    OR: [
+      { projectId },
+      { canonicalCode: projectId }
+    ]
+  };
+}
 
-  // Filter berdasarkan status resmi proyek
-  if (status && status !== 'ALL') {
-    list = list.filter(p => p.status === status);
-  }
+function notFound(projectId, withDetails = false) {
+  const body = {
+    code: 'PROJECT_NOT_FOUND',
+    message: withDetails
+      ? `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`
+      : `Proyek ${projectId} tidak ditemukan`
+  };
+  if (withDetails) body.details = { requestedProjectId: projectId };
+  return body;
+}
 
-  // Filter pencarian teks bebas (nama proyek, kode kanonis, nama klien)
-  if (q) {
-    const keyword = q.toLowerCase();
-    list = list.filter(p => 
-      (p.projectName && p.projectName.toLowerCase().includes(keyword)) ||
-      (p.canonicalCode && p.canonicalCode.includes(keyword)) ||
-      (p.clientName && p.clientName.toLowerCase().includes(keyword))
-    );
-  }
+function projectForCreateResponse(project) {
+  return {
+    ...project,
+    createdAt: getWIBTimestamp(project.createdAt),
+    updatedAt: getWIBTimestamp(project.updatedAt)
+  };
+}
 
-  const total = list.length;
-  const totalPages = Math.ceil(total / limit) || 1;
-  const startIndex = (page - 1) * limit;
-  
-  // Format seluruh item sesuai kontrak kanonis
-  const paginatedProjects = list
-    .slice(startIndex, startIndex + limit)
-    .map(toCanonicalProject);
-
-  // Mengembalikan struktur resmi ProjectListResponse
-  res.status(200).json({
-    data: paginatedProjects,
-    meta: {
-      page,
-      limit,
-      total,
-      totalPages
-    }
-  });
-});
-
-// ============================================================================
-// 2. API-K01-07: DETAIL TUNGGAL PROYEK KANONIS (SINGLE SOURCE OF TRUTH)
-// Digunakan oleh: Modul E-2, E-3, E-5, D-3
-// ============================================================================
-router.get('/projects/:projectId', (req, res) => {
-  const { projectId } = req.params;
-  const db = readDB();
-  const list = db.projects || [];
-
-  // Mendukung pencarian via UUID v7 maupun nomor kanonis 6 digit (contoh: 202601)
-  const project = list.find(p => p.projectId === projectId || p.canonicalCode === projectId);
-
-  if (!project) {
-    return res.status(404).json({
-      code: "PROJECT_NOT_FOUND",
-      message: `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`,
-      details: {
-        requestedProjectId: projectId
+async function updateProjectAndLog(project, status, action, details, extraData = {}) {
+  assertProjectStatus(status);
+  return prisma.$transaction(async transaction => {
+    const updatedProject = await transaction.project.update({
+      where: { projectId: project.projectId },
+      data: { status, ...extraData }
+    });
+    await transaction.projectAuditLog.create({
+      data: {
+        auditLogId: uuidv7(),
+        projectId: project.projectId,
+        actorUserId: ACTOR_USER_ID,
+        action,
+        details
       }
     });
+    return updatedProject;
+  });
+}
+
+router.get('/projects', asyncHandler(async (req, res) => {
+  const page = Math.max(1, parseInt(req.query.page, 10) || 1);
+  const limit = Math.max(1, parseInt(req.query.limit, 10) || 3);
+  const where = {};
+
+  if (req.query.status && req.query.status !== 'ALL') {
+    where.status = req.query.status;
+  }
+  if (req.query.q) {
+    const keyword = String(req.query.q);
+    where.OR = [
+      { projectName: { contains: keyword } },
+      { canonicalCode: { contains: keyword } },
+      { clientName: { contains: keyword } }
+    ];
   }
 
-  // Kembalikan format ProjectCanonicalResponse (tanpa indicativeValue)
-  res.status(200).json(toCanonicalProject(project));
-});
+  const [total, projects] = await prisma.$transaction([
+    prisma.project.count({ where }),
+    prisma.project.findMany({
+      where,
+      orderBy: { canonicalCode: 'desc' },
+      skip: (page - 1) * limit,
+      take: limit
+    })
+  ]);
+  const totalPages = Math.ceil(total / limit) || 1;
 
-// ============================================================================
-// 3. API-K01-01: PENDAFTARAN DRAF PROYEK BARU
-// ============================================================================
-router.post('/projects', (req, res) => {
+  res.status(200).json({
+    data: projects.map(toCanonicalProject),
+    meta: { page, limit, total, totalPages }
+  });
+}));
+
+router.get('/projects/:projectId', asyncHandler(async (req, res) => {
+  const { projectId } = req.params;
+  const project = await prisma.project.findFirst({ where: findProjectWhere(projectId) });
+
+  if (!project) {
+    return res.status(404).json(notFound(projectId, true));
+  }
+  return res.status(200).json(toCanonicalProject(project));
+}));
+
+router.post('/projects', asyncHandler(async (req, res) => {
   const {
     projectName,
     clientId,
@@ -99,151 +116,130 @@ router.post('/projects', (req, res) => {
     indicativeValue
   } = req.body;
 
-  // Validasi Aturan Bisnis D-1
-  if (!projectName || projectName.trim().length < 5) {
+  if (typeof projectName !== 'string' || projectName.trim().length < 5) {
     return res.status(400).json({
-      code: "VALIDATION_ERROR",
-      message: "Nama proyek wajib diisi minimal 5 karakter",
-      details: { field: "projectName" }
+      code: 'VALIDATION_ERROR',
+      message: 'Nama proyek wajib diisi minimal 5 karakter',
+      details: { field: 'projectName' }
     });
   }
-
   if (!startDate || !targetEndDate) {
     return res.status(400).json({
-      code: "VALIDATION_ERROR",
-      message: "Estimasi tanggal mulai dan selesai wajib ditentukan",
-      details: { field: "dates" }
+      code: 'VALIDATION_ERROR',
+      message: 'Estimasi tanggal mulai dan selesai wajib ditentukan',
+      details: { field: 'dates' }
     });
   }
-
   if (new Date(targetEndDate) < new Date(startDate)) {
     return res.status(400).json({
-      code: "VALIDATION_ERROR",
-      message: "Target selesai tidak boleh mendahului tanggal mulai proyek",
-      details: { field: "targetEndDate" }
+      code: 'VALIDATION_ERROR',
+      message: 'Target selesai tidak boleh mendahului tanggal mulai proyek',
+      details: { field: 'targetEndDate' }
     });
   }
 
-  const db = readDB();
-  db.projects = db.projects || [];
-
-  const nowWIB = getWIBTimestamp();
-  const canonicalCode = generateNextCanonicalCode(db.projects);
-  const projectId = crypto.randomUUID(); // Identitas UUID unik
-
-  const newProject = {
-    projectId,
-    canonicalCode,
-    projectName: projectName.trim(),
-    clientId: clientId || 'PTANTRI',
-    clientName: clientName || 'PT Anaheim Nimbus Universal',
-    amEmployeeId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1', // Sesi AM Andi Maulana
-    pmEmployeeId: pmEmployeeId || 'SDM-0004',
-    pmName: pmName || 'Budi Santoso, M.T.',
-    startDate,
-    targetEndDate,
-    indicativeValue: Number(indicativeValue) || 0,
-    documentsComplete: true,
-    poReceived: false, // Wajib bernilai false saat pendaftaran awal (Q-01 & Q-07)
-    status: 'DRAFT',
-    createdAt: nowWIB,
-    updatedAt: nowWIB
-  };
-
-  db.projects.unshift(newProject);
-  writeDB(db);
-
-  res.status(201).json({
-    message: "Draf proyek berhasil didaftarkan",
-    data: newProject
+  const canonicalCode = await generateNextCanonicalCode(prisma);
+  const now = new Date();
+  const project = await prisma.$transaction(async transaction => {
+    const createdProject = await transaction.project.create({
+      data: {
+        projectId: uuidv7(),
+        canonicalCode,
+        projectName: projectName.trim(),
+        clientId: clientId || 'PTANTRI',
+        clientName: clientName || 'PT Anaheim Nimbus Universal',
+        amEmployeeId: ACTOR_USER_ID,
+        amName: 'Andi Maulana',
+        pmEmployeeId: pmEmployeeId || 'SDM-0004',
+        pmName: pmName || 'Budi Santoso, M.T.',
+        startDate,
+        targetEndDate,
+        indicativeValue: Number(indicativeValue) || 0,
+        documentsComplete: true,
+        poReceived: false,
+        status: assertProjectStatus('DRAFT'),
+        createdAt: now
+      }
+    });
+    await transaction.projectAuditLog.create({
+      data: {
+        auditLogId: uuidv7(),
+        projectId: createdProject.projectId,
+        actorUserId: ACTOR_USER_ID,
+        action: 'CREATE_DRAFT',
+        details: `Draf proyek terdaftar dengan kode kanonis ${canonicalCode}`
+      }
+    });
+    return createdProject;
   });
-});
 
-// ============================================================================
-// 4. API-K01-04: PENGAJUAN SERAH TERIMA / HANDOVER KE PM
-// ============================================================================
-router.post('/projects/:projectId/handover', (req, res) => {
+  return res.status(201).json({
+    message: 'Draf proyek berhasil didaftarkan',
+    data: projectForCreateResponse(project)
+  });
+}));
+
+router.post('/projects/:projectId/handover', asyncHandler(async (req, res) => {
   const { projectId } = req.params;
-  const db = readDB();
-  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
+  const project = await prisma.project.findFirst({ where: findProjectWhere(projectId) });
+  if (!project) return res.status(404).json(notFound(projectId));
 
-  if (!project) {
-    return res.status(404).json({
-      code: "PROJECT_NOT_FOUND",
-      message: `Proyek ${projectId} tidak ditemukan`
-    });
-  }
-
-  project.status = 'UNDER_REVIEW';
-  project.updatedAt = getWIBTimestamp();
-  writeDB(db);
-
-  res.status(200).json({
-    message: "Proyek berhasil diajukan untuk review PM",
-    data: toCanonicalProject(project)
+  const updatedProject = await updateProjectAndLog(
+    project,
+    'UNDER_REVIEW',
+    'SUBMIT_REVIEW',
+    `Proyek ${project.canonicalCode || project.projectId} diajukan untuk review PM`
+  );
+  return res.status(200).json({
+    message: 'Proyek berhasil diajukan untuk review PM',
+    data: toCanonicalProject(updatedProject)
   });
-});
+}));
 
-// ============================================================================
-// 5. API-K01-06: VERIFIKASI PERSETUJUAN PM (APPROVE -> REGISTERED)
-// ============================================================================
-router.post('/projects/:projectId/approve', (req, res) => {
+router.post('/projects/:projectId/approve', asyncHandler(async (req, res) => {
   const { projectId } = req.params;
-  const db = readDB();
-  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
+  const project = await prisma.project.findFirst({ where: findProjectWhere(projectId) });
+  if (!project) return res.status(404).json(notFound(projectId));
 
-  if (!project) {
-    return res.status(404).json({
-      code: "PROJECT_NOT_FOUND",
-      message: `Proyek ${projectId} tidak ditemukan`
-    });
-  }
-
-  project.status = 'REGISTERED';
-  project.updatedAt = getWIBTimestamp();
-  writeDB(db);
-
-  res.status(200).json({
-    message: "Proyek disetujui dan berstatus REGISTERED",
-    data: toCanonicalProject(project)
+  const updatedProject = await updateProjectAndLog(
+    project,
+    'REGISTERED',
+    'APPROVE_HANDOVER',
+    `Serah terima proyek ${project.canonicalCode || project.projectId} disetujui`
+  );
+  return res.status(200).json({
+    message: 'Proyek disetujui dan berstatus REGISTERED',
+    data: toCanonicalProject(updatedProject)
   });
-});
+}));
 
-// ============================================================================
-// 6. API-K01-05: PENOLAKAN SERAH TERIMA PM (REJECT -> REVISI_HANDOVER)
-// ============================================================================
-router.post('/projects/:projectId/reject', (req, res) => {
+router.post('/projects/:projectId/reject', asyncHandler(async (req, res) => {
   const { projectId } = req.params;
   const { rejectionNotes } = req.body;
 
-  // Validasi Keputusan Mitra Q-04: Catatan penolakan PM wajib minimal 20 karakter
-  if (!rejectionNotes || rejectionNotes.trim().length < 20) {
+  if (typeof rejectionNotes !== 'string' || rejectionNotes.trim().length < 20) {
     return res.status(400).json({
-      code: "VALIDATION_ERROR",
-      message: "Catatan revisi PM wajib diisi minimal 20 karakter",
-      details: { field: "rejectionNotes" }
+      code: 'VALIDATION_ERROR',
+      message: 'Catatan revisi PM wajib diisi minimal 20 karakter',
+      details: { field: 'rejectionNotes' }
     });
   }
 
-  const db = readDB();
-  const project = (db.projects || []).find(p => p.projectId === projectId || p.canonicalCode === projectId);
+  const project = await prisma.project.findFirst({ where: findProjectWhere(projectId) });
+  if (!project) return res.status(404).json(notFound(projectId));
 
-  if (!project) {
-    return res.status(404).json({
-      code: "PROJECT_NOT_FOUND",
-      message: `Proyek ${projectId} tidak ditemukan`
-    });
-  }
-
-  project.status = 'REVISI_HANDOVER';
-  project.rejectionNotes = rejectionNotes.trim();
-  project.updatedAt = getWIBTimestamp();
-  writeDB(db);
-
-  res.status(200).json({
-    message: "Serah terima proyek ditolak untuk revisi",
-    data: toCanonicalProject(project)
+  const notes = rejectionNotes.trim();
+  const updatedProject = await updateProjectAndLog(
+    project,
+    'REVISI_HANDOVER',
+    'REJECT_REVISION',
+    notes,
+    { rejectionNotes: notes }
+  );
+  return res.status(200).json({
+    message: 'Serah terima proyek ditolak untuk revisi',
+    data: toCanonicalProject(updatedProject)
   });
-});
+}));
 
 module.exports = router;

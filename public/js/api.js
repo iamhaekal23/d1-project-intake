@@ -25,6 +25,34 @@ export const ProjectAPI = {
     return result;
   },
 
+  async handoverProject(projectId) {
+    return this.postProjectAction(projectId, 'handover');
+  },
+
+  async approveProject(projectId) {
+    return this.postProjectAction(projectId, 'approve');
+  },
+
+  async rejectProject(projectId, rejectionNotes) {
+    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/reject`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ rejectionNotes })
+    });
+    const result = await res.json();
+    if (!res.ok) throw result;
+    return result;
+  },
+
+  async postProjectAction(projectId, action) {
+    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/${action}`, {
+      method: 'POST'
+    });
+    const result = await res.json();
+    if (!res.ok) throw result;
+    return result;
+  },
+
   // Ambil data PM (dari adapter F-2)
   async getPMReferences() {
     const res = await fetch(`${API_BASE}/referensi/sdm`);

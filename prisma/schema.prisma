@@ -1,0 +1,67 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model Project {
+  projectId         String            @id
+  canonicalCode     String?           @unique
+  projectName       String
+  clientId          String
+  clientName        String?
+  amEmployeeId      String
+  amName            String?
+  pmEmployeeId      String?
+  pmName            String?
+  startDate         String
+  targetEndDate     String
+  indicativeValue   Float             @default(0)
+  status            String            @default("DRAFT")
+  poReceived        Boolean           @default(false)
+  documentsComplete Boolean           @default(false)
+  rejectionNotes    String?
+  createdAt         DateTime          @default(now())
+  updatedAt         DateTime          @updatedAt
+  documents         ProjectDocument[]
+  auditLogs         ProjectAuditLog[]
+
+  @@index([status])
+}
+
+model ProjectDocument {
+  documentId    String   @id
+  projectId     String
+  documentType  String
+  fileTitle     String
+  fileUri       String
+  mimeType      String
+  fileSizeBytes Int
+  uploadedBy    String
+  uploadedAt    DateTime @default(now())
+  project       Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model ProjectAuditLog {
+  auditLogId  String   @id
+  projectId   String
+  actorUserId String
+  action      String
+  details     String   @default("")
+  timestamp   DateTime @default(now())
+  project     Project  @relation(fields: [projectId], references: [projectId], onDelete: Cascade)
+
+  @@index([projectId])
+}
+
+model TemporaryClient {
+  tempClientId String   @id
+  companyName  String
+  syncStatus   String   @default("PENDING")
+  createdAt    DateTime @default(now())
+}

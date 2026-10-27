@@ -278,7 +278,8 @@ async function handleProjectSubmit(targetStatus = 'DRAFT') {
     const newProject = res.data;
 
     if (targetStatus === 'UNDER_REVIEW') {
-      newProject.status = 'UNDER_REVIEW';
+      const handoverResult = await ProjectAPI.handoverProject(newProject.projectId);
+      Object.assign(newProject, handoverResult.data);
     }
 
     projects.unshift(newProject);
@@ -317,29 +318,38 @@ function renderProjectDetail(proj) {
   }
 }
 
-function verifyPMDecision(action) {
+async function verifyPMDecision(action) {
   if (!activeProject) return;
 
-  if (action === 'APPROVE') {
-    activeProject.status = 'REGISTERED';
-    showToast('Proyek berhasil disetujui & berstatus REGISTERED');
-    renderProjectDetail(activeProject);
-    renderDashboardTable();
-  } else if (action === 'REJECT') {
-    const notes = document.getElementById('pmNotes').value.trim();
-    const errEl = document.getElementById('errPmNotes');
+  try {
+    let result;
+    if (action === 'APPROVE') {
+      result = await ProjectAPI.approveProject(activeProject.projectId);
+    } else if (action === 'REJECT') {
+      const notes = document.getElementById('pmNotes').value.trim();
+      const errEl = document.getElementById('errPmNotes');
 
-    if (notes.length < 20) {
-      errEl.innerText = 'Catatan revisi PM wajib diisi minimal 20 karakter.';
-      errEl.classList.remove('hidden');
-      return;
+      if (notes.length < 20) {
+        errEl.innerText = 'Catatan revisi PM wajib diisi minimal 20 karakter.';
+        errEl.classList.remove('hidden');
+        return;
+      }
+
+      errEl.classList.add('hidden');
+      result = await ProjectAPI.rejectProject(activeProject.projectId, notes);
     }
 
-    errEl.classList.add('hidden');
-    activeProject.status = 'REVISI_HANDOVER';
-    showToast('Handover dikembalikan ke AM untuk revisi');
+    activeProject = { ...activeProject, ...result.data };
+    projects = projects.map(project =>
+      project.projectId === activeProject.projectId ? activeProject : project
+    );
+    showToast(action === 'APPROVE'
+      ? 'Proyek berhasil disetujui & berstatus REGISTERED'
+      : 'Handover dikembalikan ke AM untuk revisi');
     renderProjectDetail(activeProject);
     renderDashboardTable();
+  } catch (err) {
+    showToast(err.message || 'Gagal memperbarui status proyek', 'error');
   }
 }
 

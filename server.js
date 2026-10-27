@@ -18,6 +18,15 @@ app.use(express.static(path.join(__dirname, 'public')));
 app.use('/api/v1', mockService);
 app.use('/api/v1', projectRoutes);
 
+app.use((err, req, res, next) => {
+  console.error('[API] Gagal memproses permintaan:', err);
+  if (res.headersSent) return next(err);
+  return res.status(500).json({
+    code: 'INTERNAL_SERVER_ERROR',
+    message: 'Terjadi kesalahan internal'
+  });
+});
+
 // Server Listen
 app.listen(PORT, () => {
   console.log(`====================================================`);

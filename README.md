@@ -9,27 +9,36 @@ Repositori ini menyediakan data proyek terpusat (*Single Source of Truth*) untuk
 ## 1. Cara Menjalankan Aplikasi Web
 
 Pastikan Node.js dan npm telah terpasang pada perangkat sebelum menjalankan aplikasi.
+Pastikan `.env` berisi `DATABASE_URL="file:./dev.db"`; jika belum ada, salin `.env.example` menjadi `.env`.
 
 1. **Pasang dependensi**
    ```bash
    npm install
    ```
 
-2. **Muat data awal ke database**
+2. **Buat atau terapkan skema database SQLite**
+   ```bash
+   npx prisma migrate deploy
+   ```
+
+3. **Muat data awal ke database SQLite**
    ```bash
    npm run db:seed
    ```
 
-3. **Jalankan server aplikasi**
+4. **Jalankan server aplikasi**
    ```bash
    npm start
    ```
 
-4. **Buka aplikasi melalui browser**
+5. **Buka aplikasi melalui browser**
 
    Akses alamat berikut:
 
    `http://localhost:3000`
+
+Data proyek disimpan secara lokal di SQLite melalui Prisma ORM. Jalankan `npm run db:studio`
+untuk membuka Prisma Studio dan menjelajahi data database.
 
 ---
 

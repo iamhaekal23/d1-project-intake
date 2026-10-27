@@ -5,10 +5,17 @@
   "main": "server.js",
   "scripts": {
     "start": "node server.js",
-    "db:seed": "node scripts/seed.js"
+    "db:migrate": "prisma migrate dev",
+    "db:seed": "node scripts/seed.js",
+    "db:studio": "prisma studio",
+    "postinstall": "prisma generate"
   },
   "dependencies": {
-    "express": "^4.19.2",
-    "cors": "^2.8.5"
+    "@prisma/client": "^6.19.3",
+    "cors": "^2.8.5",
+    "express": "^4.19.2"
+  },
+  "devDependencies": {
+    "prisma": "^6.19.3"
   }
 }

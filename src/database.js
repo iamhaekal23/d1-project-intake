@@ -1,51 +1,53 @@
-// src/database.js - Akses Basis Data Fisik & Serializer Kanonis D-1
-const fs = require('fs');
-const path = require('path');
+const crypto = require('crypto');
 
-const DB_PATH = path.join(__dirname, '../data/db.json');
+const PROJECT_STATUSES = Object.freeze([
+  'DRAFT',
+  'UNDER_REVIEW',
+  'REVISI_HANDOVER',
+  'REGISTERED'
+]);
 
-// Membaca isi basis data fisik db.json
-function readDB() {
-  try {
-    if (!fs.existsSync(DB_PATH)) {
-      return { projects: [], temporary_clients: [], project_audit_logs: [] };
-    }
-    const data = fs.readFileSync(DB_PATH, 'utf-8');
-    return JSON.parse(data);
-  } catch (err) {
-    console.error('[Database] Gagal membaca db.json:', err.message);
-    return { projects: [], temporary_clients: [], project_audit_logs: [] };
+function assertProjectStatus(status) {
+  if (!PROJECT_STATUSES.includes(status)) {
+    throw new Error(`Status proyek tidak valid: ${status}`);
   }
+  return status;
 }
 
-// Menyimpan pembaruan ke basis data fisik db.json
-function writeDB(data) {
-  try {
-    fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2), 'utf-8');
-  } catch (err) {
-    console.error('[Database] Gagal menulis ke db.json:', err.message);
+function getWIBTimestamp(value = new Date()) {
+  const date = value instanceof Date ? value : new Date(value);
+  return new Date(date.getTime() + 7 * 60 * 60 * 1000)
+    .toISOString()
+    .replace('Z', '+07:00');
+}
+
+async function generateNextCanonicalCode(prisma, year = new Date().getFullYear().toString()) {
+  const latestProject = await prisma.project.findFirst({
+    where: { canonicalCode: { startsWith: year } },
+    orderBy: { canonicalCode: 'desc' },
+    select: { canonicalCode: true }
+  });
+  const latestSequence = latestProject
+    ? Number(latestProject.canonicalCode.slice(year.length))
+    : 0;
+  return `${year}${(latestSequence + 1).toString().padStart(2, '0')}`;
+}
+
+function uuidv7() {
+  const bytes = crypto.randomBytes(16);
+  const timestamp = BigInt(Date.now());
+
+  for (let index = 5; index >= 0; index--) {
+    bytes[index] = Number((timestamp >> BigInt((5 - index) * 8)) & 0xffn);
   }
+
+  bytes[6] = (bytes[6] & 0x0f) | 0x70;
+  bytes[8] = (bytes[8] & 0x3f) | 0x80;
+
+  const hex = bytes.toString('hex');
+  return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
-// Menghasilkan timestamp ISO 8601 dengan offset WIB UTC+7 (contoh: 2026-10-21T22:00:00+07:00)
-function getWIBTimestamp() {
-  const now = new Date();
-  const wibTime = new Date(now.getTime() + 7 * 60 * 60 * 1000);
-  const iso = wibTime.toISOString().replace('Z', '+07:00');
-  return iso;
-}
-
-// Generator nomor kode kanonis tahunan urut format YYYYXX (Keputusan Q-02)
-function generateNextCanonicalCode(existingProjects = []) {
-  const currentYear = new Date().getFullYear().toString();
-  const yearProjects = existingProjects.filter(p => 
-    p.canonicalCode && p.canonicalCode.startsWith(currentYear)
-  );
-  const nextSeq = yearProjects.length + 1;
-  return `${currentYear}${nextSeq.toString().padStart(2, '0')}`;
-}
-
-// Serializer Kanonis Resmi (API-K01-07): Menyaring atribut sensitif (indicativeValue)
 function toCanonicalProject(project) {
   return {
     projectId: project.projectId,
@@ -60,15 +62,16 @@ function toCanonicalProject(project) {
     documentsComplete: typeof project.documentsComplete === 'boolean' ? project.documentsComplete : true,
     poReceived: typeof project.poReceived === 'boolean' ? project.poReceived : false,
     status: project.status || 'DRAFT',
-    createdAt: project.createdAt || getWIBTimestamp(),
-    updatedAt: project.updatedAt || getWIBTimestamp()
+    createdAt: getWIBTimestamp(project.createdAt || new Date()),
+    updatedAt: getWIBTimestamp(project.updatedAt || new Date())
   };
 }
 
 module.exports = {
-  readDB,
-  writeDB,
-  getWIBTimestamp,
+  PROJECT_STATUSES,
+  assertProjectStatus,
   generateNextCanonicalCode,
-  toCanonicalProject
+  getWIBTimestamp,
+  toCanonicalProject,
+  uuidv7
 };
