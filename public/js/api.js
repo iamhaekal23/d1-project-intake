@@ -1,83 +1,104 @@
-// public/js/api.js - Panggilan REST API Modul D-1
 const API_BASE = '/api/v1';
 
-export const ProjectAPI = {
-  // Ambil daftar proyek kanonis (mendukung struktur pembungkus data & meta)
-  async getProjects() {
-    const res = await fetch(`${API_BASE}/projects?page=1&limit=100`);
-    if (!res.ok) throw new Error('Gagal mengambil daftar proyek');
-    const result = await res.json();
-    return Array.isArray(result) ? result : (result.data || []);
-  },
+async function request(path, options = {}) {
+  const response = await fetch(`${API_BASE}${path}`, {
+    headers: {
+      'Content-Type': 'application/json',
+      'Accept': 'application/json',
+      ...(options.headers || {})
+    },
+    ...options
+  });
 
-  // Simpan draf proyek baru
-  async createProject(payload) {
-    const res = await fetch(`${API_BASE}/projects`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        'Authorization': 'Bearer mock-jwt-token-f1-account-manager-2026'
-      },
-      body: JSON.stringify(payload)
-    });
-    const result = await res.json();
-    if (!res.ok) throw result;
-    return result;
-  },
-
-  async handoverProject(projectId) {
-    return this.postProjectAction(projectId, 'handover');
-  },
-
-  async approveProject(projectId) {
-    return this.postProjectAction(projectId, 'approve');
-  },
-
-  async rejectProject(projectId, rejectionNotes) {
-    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/reject`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ rejectionNotes })
-    });
-    const result = await res.json();
-    if (!res.ok) throw result;
-    return result;
-  },
-
-  async postProjectAction(projectId, action) {
-    const res = await fetch(`${API_BASE}/projects/${encodeURIComponent(projectId)}/${action}`, {
-      method: 'POST'
-    });
-    const result = await res.json();
-    if (!res.ok) throw result;
-    return result;
-  },
-
-  // Ambil data PM (dari adapter F-2)
-  async getPMReferences() {
-    const res = await fetch(`${API_BASE}/referensi/sdm`);
-    if (!res.ok) throw new Error('Gagal memuat master PM');
-    const data = await res.json();
-    return data.items || [];
-  },
-
-  // Ambil data Klien (dari adapter F-6)
-  async getClients() {
-    const res = await fetch(`${API_BASE}/clients`);
-    if (!res.ok) throw new Error('Gagal memuat master Klien');
-    const data = await res.json();
-    return data.data || [];
-  },
-
-  // Tambah draf klien sementara (Q-09)
-  async addTemporaryClient(companyName) {
-    const res = await fetch(`${API_BASE}/temporary-clients`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ companyName })
-    });
-    const result = await res.json();
-    if (!res.ok) throw result;
-    return result;
+  const data = await response.json().catch(() => ({}));
+  if (!response.ok) {
+    const error = new Error(data.message || `Permintaan gagal (${response.status})`);
+    error.status = response.status;
+    error.body = data;
+    throw error;
   }
-};
+  return data;
+}
+
+export async function fetchProjects(params = {}) {
+  const query = new URLSearchParams();
+  if (params.page) query.set('page', String(params.page));
+  if (params.limit) query.set('limit', String(params.limit));
+  if (params.status && params.status !== 'ALL') query.set('status', params.status);
+  if (params.q) query.set('q', params.q);
+  const qs = query.toString();
+  return request(`/projects${qs ? `?${qs}` : ''}`);
+}
+
+export async function fetchProjectById(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}`);
+}
+
+export async function createProject(payload) {
+  return request('/projects', {
+    method: 'POST',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateProject(projectId, payload) {
+  return request(`/projects/${encodeURIComponent(projectId)}`, {
+    method: 'PUT',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function updateDocumentStatus(projectId, payload) {
+  return request(`/projects/${encodeURIComponent(projectId)}/documents-status`, {
+    method: 'PATCH',
+    body: JSON.stringify(payload)
+  });
+}
+
+export async function handoverProject(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}/handover`, {
+    method: 'POST'
+  });
+}
+
+export async function approveProject(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}/approve`, {
+    method: 'POST'
+  });
+}
+
+export async function rejectProject(projectId, notes) {
+  const res = await fetch(`/api/v1/projects/${projectId}/reject`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ 
+      notes: notes,
+      reason: notes 
+    })
+  });
+
+  const data = await res.json();
+  if (!res.ok) {
+    throw new Error(data.message || 'Gagal menolak handover proyek');
+  }
+  return data;
+}
+
+export function getProjectCharterUrl(projectId) {
+  return `${API_BASE}/projects/${encodeURIComponent(projectId)}/charter`;
+}
+
+export async function fetchClients() {
+  return request('/clients');
+}
+
+export async function createTemporaryClient(companyName) {
+  return request('/temporary-clients', {
+    method: 'POST',
+    body: JSON.stringify({ companyName })
+  });
+}
+
+export async function fetchEmployees() {
+  return request('/referensi/sdm');
+}

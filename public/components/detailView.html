@@ -1,0 +1,226 @@
+<!-- VIEW 3: DETAIL PROYEK & PANEL VERIFIKASI PM (UI-K01-03) -->
+<div id="viewDetail" class="space-y-6">
+
+  <!-- Header Layar: Label Modul, Judul Kode Proyek, Badge Status, & Tombol Kembali -->
+  <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
+    <div>
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">MODUL D-1 / DETAIL PROYEK</div>
+      <div class="flex items-center space-x-3 mt-0.5">
+        <h1 id="detailTitle" class="text-2xl font-bold text-slate-900">Kode —</h1>
+        <span id="detailBadgeStatus" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">
+          • UNDER_REVIEW
+        </span>
+      </div>
+      <p id="detailSubtitle" class="text-xs text-slate-500 mt-1">Nama Proyek · Nama Klien</p>
+    </div>
+
+    <div class="flex items-center space-x-3">
+      <!-- Tombol Unduh Project Charter (Hanya Muncul Jika Status REGISTERED) -->
+      <button id="btnDownloadCharter" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 hidden">
+        <span>⬇</span>
+        <span>Unduh Project Charter</span>
+      </button>
+
+      <!-- Tombol Ubah Draf (Muncul jika status DRAFT atau REVISI_HANDOVER) -->
+      <button id="btnEditProject" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 hidden">
+        <span>✎</span>
+        <span>Ubah Data Proyek</span>
+      </button>
+
+      <button id="btnBackFromDetail" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2">
+        <span>←</span>
+        <span>Kembali ke Daftar</span>
+      </button>
+    </div>
+  </div>
+
+  <!-- Banner Peringatan Penolakan Revisi PM (Jika Berstatus REVISI_HANDOVER) -->
+  <div id="detailRejectionBanner" class="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-3 hidden">
+    <span class="text-rose-600 font-bold text-base leading-none mt-0.5">⚠</span>
+    <div>
+      <h4 class="text-xs font-bold text-rose-800 uppercase tracking-wider">Handover Ditolak / Perlu Revisi</h4>
+      <p id="detailRejectionText" class="text-xs text-rose-700 mt-1 font-medium"></p>
+    </div>
+  </div>
+
+  <!-- Layout Grid 2 Kolom (Kiri: Info & Dokumen Handover, Kanan: Panel Verifikasi PM & Riwayat) -->
+  <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
+
+    <!-- ==================== KOLOM KIRI (LEBAR 2) ==================== -->
+    <div class="lg:col-span-2 space-y-6">
+
+      <!-- 1. KARTU INFO UMUM -->
+      <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+        <div>
+          <h2 class="text-sm font-bold text-slate-900">Info Umum</h2>
+          <p class="text-[11px] text-slate-400 mt-0.5">Informasi proyek dan penanggung jawab handover.</p>
+        </div>
+
+        <!-- Grid Metadata (3 Kolom x 2 Baris) -->
+        <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-4 gap-x-6 text-xs">
+          <div>
+            <span class="text-slate-400 text-[11px] block">Kode</span>
+            <span id="detailCode" class="font-bold text-slate-900 mt-0.5 block">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[11px] block">Klien</span>
+            <span id="detailClient" class="font-bold text-slate-900 mt-0.5 block">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[11px] block">Tanggal Pengajuan</span>
+            <span id="detailSubmissionDate" class="font-semibold text-slate-800 mt-0.5 block">—</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[11px] block">AM / Account Manager</span>
+            <span id="detailAm" class="font-semibold text-slate-800 mt-0.5 block">Andi Maulana</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[11px] block">PM / Project Manager</span>
+            <span id="detailPm" class="font-semibold text-slate-800 mt-0.5 block">Budi Santoso</span>
+          </div>
+          <div>
+            <span class="text-slate-400 text-[11px] block">Estimasi Mulai & Selesai</span>
+            <span id="detailDates" class="font-semibold text-slate-800 mt-0.5 block">—</span>
+          </div>
+        </div>
+
+        <!-- Nilai Indikatif (Rp) Tebal di Kanan Bawah Info Umum -->
+        <div class="pt-4 border-t border-slate-100 flex items-center justify-between text-xs">
+          <span class="text-slate-500 font-medium">Nilai Indikatif (Rp)</span>
+          <span id="detailValue" class="text-base font-bold text-slate-900">Rp 0</span>
+        </div>
+      </div>
+
+      <!-- 2. KARTU DOKUMEN HANDOVER (STANDAR WI-01 & PO) -->
+      <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+        <div>
+          <h2 class="text-sm font-bold text-slate-900">Dokumen Handover</h2>
+          <p class="text-[11px] text-slate-400 mt-0.5">WI-01 · RKS, SPK, Kontrak, KAK, SOW & PO</p>
+        </div>
+
+        <!-- Kontainer Berkas Dokumen Dinamis (Di-render via detail.js) -->
+        <div id="documentListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
+          <!-- Item RKS, SPK, Kontrak, KAK, SOW & Kartu PO akan dirender dinamis di sini -->
+        </div>
+
+        <!-- Sakelar Dokumen Lengkap MANUAL -->
+        <div class="pt-4 border-t border-slate-100 flex items-center space-x-3">
+          <label class="relative inline-flex items-center cursor-pointer">
+            <input type="checkbox" id="toggleDocsComplete" class="sr-only peer">
+            <div class="w-11 h-6 bg-slate-200 peer-focus:outline-none rounded-full peer peer-checked:after:translate-x-full peer-checked:after:border-white after:content-[''] after:absolute after:top-[2px] after:left-[2px] after:bg-white after:border-slate-300 after:border after:rounded-full after:h-5 after:w-5 after:transition-all peer-checked:bg-[#152a4a]"></div>
+          </label>
+          <div>
+            <div class="flex items-center space-x-2">
+              <span class="text-xs font-bold text-slate-800">Dokumen Lengkap</span>
+              <span class="text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">MANUAL</span>
+            </div>
+            <p class="text-[11px] text-slate-400 mt-0.5">documents_complete · Ditandai manual oleh AM; tidak menghapus kewajiban unggah PO untuk penagihan E-2.</p>
+          </div>
+        </div>
+
+      </div>
+
+      <!-- 3. BANNER PERINGATAN PROTEKSI PO FISIK BELUM DIUNGGAH -->
+      <div id="poWarningBanner" class="p-4 bg-[#fef9ee] border border-amber-200 rounded-xl space-y-1">
+        <div class="flex items-center space-x-2 text-amber-800 font-bold text-xs">
+          <span>⚠</span>
+          <span>PO fisik belum diunggah. Tagihan di E-2 terblokir hingga PO diunggah.</span>
+        </div>
+        <p class="text-[11px] text-amber-700 pl-4 leading-relaxed">
+          Blokir penagihan berlaku terpisah dari status registrasi dan Dokumen Lengkap.
+        </p>
+      </div>
+
+    </div>
+
+    <!-- ==================== KOLOM KANAN (LEBAR 1) ==================== -->
+    <div class="space-y-6">
+
+      <!-- 1. PANEL VERIFIKASI PM -->
+      <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
+        
+        <!-- Header Panel Verifikasi -->
+        <div class="flex items-start space-x-3">
+          <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
+            <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
+              <path stroke-linecap="round" stroke-linejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-6 9l2 2 4-4" />
+            </svg>
+          </div>
+          <div>
+            <h3 class="text-xs font-bold text-slate-900">Panel Verifikasi PM</h3>
+            <p class="text-[11px] text-slate-400 mt-0.5">Tinjau handover sebelum registrasi.</p>
+          </div>
+        </div>
+
+        <!-- Box Profil PM Penerima -->
+        <div class="bg-slate-50/80 p-3 rounded-xl border border-slate-100 flex items-center space-x-3">
+          <div id="panelPmAvatar" class="w-8 h-8 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">
+            PM
+          </div>
+          <div>
+            <div id="panelPmName" class="text-xs font-bold text-slate-900 leading-tight">Budi Santoso</div>
+            <div class="text-[10px] text-slate-400">PM Tujuan · F-2</div>
+          </div>
+        </div>
+
+        <!-- 3 Butir Checklist Persyaratan Kesiapan -->
+        <div class="space-y-2 text-xs">
+          <div class="flex items-center space-x-2 text-slate-700">
+            <span class="text-emerald-600 font-bold">✓</span>
+            <span class="text-[11px]">Informasi proyek tersedia</span>
+          </div>
+          <div class="flex items-center space-x-2 text-slate-700">
+            <span id="chkDocCountIcon" class="text-emerald-600 font-bold">✓</span>
+            <span class="text-[11px]" id="chkDocCountText">5 dokumen WI-01 diunggah</span>
+          </div>
+          <div class="flex items-center space-x-2 text-slate-700">
+            <span id="chkManualCompleteIcon" class="text-emerald-600 font-bold">✓</span>
+            <span class="text-[11px]" id="chkManualCompleteText">Kelengkapan ditandai manual</span>
+          </div>
+        </div>
+
+        <!-- Area Catatan Revisi PM (Wajib Min. 20 Karakter Jika Tolak) -->
+        <div class="space-y-1.5 pt-1">
+          <label class="block text-xs font-bold text-slate-700">
+            Catatan Revisi PM (Min. 20 karakter) <span class="text-rose-500">*</span>
+          </label>
+          <textarea id="pmNotes" rows="3" placeholder="Mohon unggah PO fisik dan konfirmasi jadwal pelaksanaan dengan klien." class="w-full border border-slate-200 bg-white p-3 rounded-xl text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 outline-none transition"></textarea>
+          <div class="flex items-center justify-between text-[10px]">
+            <span id="errPmNotes" class="text-rose-600 font-medium">Wajib diisi jika menolak handover.</span>
+            <span id="charCountLabel" class="text-slate-400 font-semibold">0/20 karakter</span>
+          </div>
+        </div>
+
+        <!-- Tombol Aksi Verifikasi PM -->
+        <div class="space-y-2.5 pt-2">
+          <button type="button" id="btnApprovePM" class="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-2">
+            <span>✓</span>
+            <span>Terima & Registrasi Proyek</span>
+          </button>
+          <button type="button" id="btnRejectPM" class="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition flex items-center justify-center space-x-2">
+            <span>↺</span>
+            <span>Tolak (Butuh Revisi)</span>
+          </button>
+        </div>
+
+        <!-- Subteks Keterangan Alur Status -->
+        <p class="text-[10px] text-slate-400 leading-relaxed text-center">
+          Penerimaan mengubah status menjadi REGISTERED. Penolakan mengembalikan handover ke AM untuk revisi.
+        </p>
+
+      </div>
+
+      <!-- 2. KARTU RIWAYAT HANDOVER (DINAMIS DARI AUDIT LOG) -->
+      <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-4">
+        <h3 class="text-xs font-bold text-slate-900">Riwayat Handover</h3>
+
+        <div id="historyTimelineContainer" class="space-y-4 relative border-l border-slate-200 ml-2 pl-4 text-xs">
+          <!-- Item riwayat audit log akan dirender dinamis di sini -->
+        </div>
+      </div>
+
+    </div>
+
+  </div>
+
+</div>

@@ -4,52 +4,76 @@ const router = express.Router();
 const prisma = require('./prisma');
 const asyncHandler = require('./asyncHandler');
 
-// Baca konfigurasi URL peladen mitra dari environment variable
-const F1_BASE = process.env.F1_API_URL || '';
-const F2_BASE = process.env.F2_API_URL || '';
-const F6_BASE = process.env.F6_API_URL || '';
+// Konfigurasi URL Server Mitra dari Environment Variable
+const F1_BASE = process.env.F1_API_URL || 'http://localhost:3001';
+const F2_BASE = process.env.F2_API_URL || 'http://localhost:8080';
+const F6_BASE = process.env.F6_API_URL || 'http://localhost:3006';
 
-// Helper fetch dengan timeout 2.5 detik agar antarmuka tidak macet saat server mitra offline
-async function fetchWithTimeout(url, options = {}, timeout = 2500) {
+// Data Cadangan Lokal Klien (Fallback F-6)
+const FALLBACK_CLIENTS = [
+  { clientId: 'PTANTRI', code: 'PTANTRI', name: 'PT Anaheim Nimbus Universal', status: 'Aktif' },
+  { clientId: 'PTINSA', code: 'PTINSA', name: 'PT Industri Nusantara Sejahtera', status: 'Aktif' },
+  { clientId: 'PTSINAR', code: 'PTSINAR', name: 'PT Sinar Logistik', status: 'Aktif' },
+  { clientId: 'PTCAKRA', code: 'PTCAKRA', name: 'PT Cakra Infrastruktur', status: 'Aktif' },
+  { clientId: 'TELKOM', code: 'TELKOM', name: 'PT Telkom Indonesia Tbk', status: 'Aktif' }
+];
+
+// Data Cadangan Lokal SDM (Fallback F-2)
+const FALLBACK_EMPLOYEES = [
+  {
+    employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a90',
+    nomorPegawai: 'SDM-2026-001',
+    namaLengkap: 'Sandy Walsh',
+    namaJabatan: 'Project Manager',
+    statusKerja: 'karyawan'
+  },
+  {
+    employeeId: 'SDM-0004',
+    nomorPegawai: 'SDM-2026-002',
+    namaLengkap: 'Budi Santoso, M.T.',
+    namaJabatan: 'Project Manager Senior',
+    statusKerja: 'karyawan'
+  }
+];
+
+// Helper Fetch dengan batas waktu (timeout) agar sistem tidak macet saat server mitra offline
+async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
   const controller = new AbortController();
-  const id = setTimeout(() => controller.abort(), timeout);
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
   try {
-    const response = await fetch(url, { credentials: 'omit', ...options, signal: controller.signal });
-    clearTimeout(id);
-    return response;
-  } catch (err) {
-    clearTimeout(id);
-    throw err;
+    return await fetch(url, { ...options, signal: controller.signal });
+  } finally {
+    clearTimeout(timer);
   }
 }
 
 // ============================================================================
-// 1. INTEGRASI F-1: IDENTITAS, AKUN & AUTENTIKASI (API-F1-02 & API-F1-01)
+// 1. INTEGRASI F-1: IDENTITAS, AKUN & AUTENTIKASI (POST /api/v1/auth/login)
 // ============================================================================
-router.post('/auth/login', async (req, res) => {
+router.post('/auth/login', asyncHandler(async (req, res) => {
   const { email, password } = req.body;
 
-  // Coba panggil API asli F-1 jika URL tersedia
+  // Coba teruskan ke server F-1 nyata jika tersedia
   if (F1_BASE) {
     try {
-      const externalRes = await fetchWithTimeout(`${F1_BASE}/api/v1/auth/login`, {
+      const extRes = await fetchWithTimeout(`${F1_BASE}/api/v1/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
       });
 
-      if (externalRes.ok) {
-        const data = await externalRes.json();
-        console.log('[D-1 Integrasi] Berhasil autentikasi via server F-1 nyata');
+      if (extRes.ok) {
+        const data = await extRes.json();
+        console.log('[D-1 Integrasi] Berhasil autentikasi via peladen F-1 nyata');
         return res.json(data);
       }
     } catch (err) {
-      console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-1. Mengaktifkan fallback lokal.');
+      console.warn('[D-1 Integrasi] Peladen F-1 tidak merespons. Mengaktifkan sesi mock lokal.');
     }
   }
 
-  // Fallback lokal jika F-1 belum aktif (Sesi AM Andi Maulana)
-  res.json({
+  // Fallback sesi lokal akun Account Manager (AM)
+  return res.json({
     token: 'mock-jwt-token-f1-account-manager-2026',
     user: {
       akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
@@ -58,134 +82,136 @@ router.post('/auth/login', async (req, res) => {
       peran: 'AM'
     }
   });
-});
+}));
 
 // ============================================================================
-// 2. INTEGRASI F-2: REFERENSI MASTER SDM PM (API-K02-16 / API-K02-17)
+// 2. INTEGRASI F-2: MASTER SDM & TENAGA AHLI (GET /api/v1/referensi/sdm)
 // ============================================================================
-const handleF2Employees = async (req, res) => {
-  // Coba panggil API asli F-2 jika URL tersedia
+const handleF2Employees = asyncHandler(async (req, res) => {
   if (F2_BASE) {
     try {
-      // Coba rute standar F-2 v1.1
-      let externalRes = await fetchWithTimeout(`${F2_BASE}/api/v1/referensi/sdm`);
-      if (!externalRes.ok) {
-        externalRes = await fetchWithTimeout(`${F2_BASE}/api/v1/employees?role=PM`);
-      }
-
-      if (externalRes.ok) {
-        const result = await externalRes.json();
-        const items = result.items || result.data || result;
-        if (Array.isArray(items) && items.length > 0) {
-          console.log('[D-1 Integrasi] Berhasil menarik data master SDM dari peladen F-2');
-          return res.json({ items });
+      const extRes = await fetchWithTimeout(`${F2_BASE}/api/v1/sdm`, {
+        method: 'GET',
+        headers: {
+          'Authorization': 'Bearer token-coo',
+          'Accept': 'application/json'
         }
+      }, 2500);
+
+      if (extRes.ok) {
+        const result = await extRes.json();
+        const rawItems = result.items || result.data || [];
+        console.log(`[D-1 Integrasi] Berhasil menarik ${rawItems.length} data SDM dari peladen F-2 nyata.`);
+
+        const items = rawItems.map(emp => ({
+          employeeId: emp.employeeId,
+          nomorPegawai: emp.nomorPegawai || '',
+          namaLengkap: emp.namaLengkap,
+          jabatanId: emp.jabatanId || '',
+          namaJabatan: emp.namaJabatan || 'Project Manager',
+          statusKerja: emp.statusKerja || 'karyawan'
+        }));
+
+        // Format ganda (items & data) untuk menjaga kompatibilitas frontend
+        return res.json({
+          items,
+          data: items,
+          total: items.length,
+          source: 'F2_LIVE_API'
+        });
       }
+      console.warn(`[D-1 Integrasi] Peladen F-2 merespons dengan HTTP ${extRes.status}. Mengaktifkan fallback.`);
     } catch (err) {
-      console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-2. Mengaktifkan fallback lokal.');
+      console.warn(`[D-1 Integrasi] Gagal menghubungi peladen F-2 di ${F2_BASE}:`, err.message);
     }
   }
 
-  // Fallback data lokal D-1 sesuai dokumen kesepakatan
-  res.json({
-    items: [
-      {
-        employeeId: 'SDM-0004',
-        namaLengkap: 'Budi Santoso, M.T.',
-        namaJabatan: 'Project Manager Senior',
-        statusKerja: 'Karyawan'
-      },
-      {
-        employeeId: 'SDM-0006',
-        namaLengkap: 'Siti Aminah, S.Kom',
-        namaJabatan: 'Project Manager',
-        statusKerja: 'Karyawan'
-      },
-      {
-        employeeId: 'SDM-0012',
-        namaLengkap: 'Andi Maulana, S.T.',
-        namaJabatan: 'Account Manager',
-        statusKerja: 'Karyawan'
-      }
-    ]
+  // Fallback lokal jika peladen F-2 belum aktif / timeout
+  return res.json({
+    items: FALLBACK_EMPLOYEES,
+    data: FALLBACK_EMPLOYEES,
+    total: FALLBACK_EMPLOYEES.length,
+    source: 'LOCAL_FALLBACK'
   });
-};
+});
 
+// Pendaftaran rute referensi SDM (mendukung alias rute integrasi)
 router.get('/referensi/sdm', handleF2Employees);
+router.get('/sdm', handleF2Employees);
 router.get('/employees', handleF2Employees);
 
 // ============================================================================
-// 3. INTEGRASI F-6: MASTER CRM KLIEN (API-KF6-01 & API-KF6-02)
+// 3. INTEGRASI F-6: MASTER CRM KLIEN & KLIEN SEMENTARA (GET /api/v1/clients)
 // ============================================================================
 router.get('/clients', asyncHandler(async (req, res) => {
-  const temporaryClients = await prisma.temporaryClient.findMany();
-  const tempClients = temporaryClients.map(tc => ({
-    clientId: tc.tempClientId,
-    code: tc.tempClientId,
-    name: `${tc.companyName} (Sementara)`,
-    status: 'Aktif'
-  }));
+  let standardClients = FALLBACK_CLIENTS;
 
-  // Coba panggil API asli F-6 jika URL tersedia
+  // Coba ambil data klien nyata dari F-6
   if (F6_BASE) {
     try {
-      const externalRes = await fetchWithTimeout(`${F6_BASE}/api/v1/clients?status=Aktif`);
-      if (externalRes.ok) {
-        const result = await externalRes.json();
-        const clientsFromF6 = result.data || result;
-        if (Array.isArray(clientsFromF6)) {
-          console.log('[D-1 Integrasi] Berhasil menarik master klien dari peladen F-6');
-          return res.json({
-            data: [...clientsFromF6, ...tempClients]
-          });
+      const extRes = await fetchWithTimeout(`${F6_BASE}/api/v1/clients?status=Aktif`, {
+        method: 'GET',
+        headers: { 'Accept': 'application/json' }
+      }, 2500);
+
+      if (extRes.ok) {
+        const result = await extRes.json();
+        const rawClients = result.data || result.items || [];
+        if (Array.isArray(rawClients) && rawClients.length > 0) {
+          console.log(`[D-1 Integrasi] Berhasil menarik ${rawClients.length} data klien dari peladen F-6.`);
+          standardClients = rawClients;
         }
       }
     } catch (err) {
-      console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-6. Mengaktifkan fallback lokal.');
+      console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-6. Menggunakan data cadangan lokal.');
     }
   }
 
-  // Fallback data master klien fiktif F-6 + draf klien sementara lokal
-  const fallbackClients = [
-    { clientId: 'PTANTRI', code: 'PTANTRI', name: 'PT Anaheim Nimbus Universal', status: 'Aktif' },
-    { clientId: 'PTINSA', code: 'PTINSA', name: 'PT Industri Nusantara Sejahtera', status: 'Aktif' },
-    { clientId: 'TELKOM', code: 'TELKOM', name: 'PT Telkom Indonesia Tbk', status: 'Aktif' }
-  ];
+  // Ambil draf klien sementara yang disimpan di database lokal D-1 (Mitigasi Q-09)
+  const tempClients = await prisma.temporaryClient.findMany({
+    orderBy: { createdAt: 'desc' }
+  });
 
-  res.json({
-    data: [...fallbackClients, ...tempClients]
+  const mappedTemp = tempClients.map(tc => ({
+    clientId: tc.tempClientId,
+    code: tc.tempClientId,
+    name: `${tc.companyName} (Draf Sementara)`,
+    status: 'Aktif'
+  }));
+
+  const combined = [...standardClients, ...mappedTemp];
+  return res.json({
+    data: combined,
+    items: combined,
+    meta: { page: 1, limit: 50, total: combined.length }
   });
 }));
 
-// Penampung Draf Klien Sementara (Mitigasi Q-09)
+// Endpoint Mandiri: Simpan Draf Klien Sementara (ENT-K01-04)
 router.post('/temporary-clients', asyncHandler(async (req, res) => {
   const { companyName } = req.body;
-  if (typeof companyName !== 'string' || companyName.trim().length < 3) {
+  if (!companyName || typeof companyName !== 'string' || companyName.trim().length < 3) {
     return res.status(400).json({
-      error: 'Nama instansi klien sementara minimal 3 karakter'
+      code: 'VALIDATION_ERROR',
+      message: 'Nama instansi wajib diisi minimal 3 karakter',
+      details: { field: 'companyName' }
     });
   }
 
-  let newClient;
-  for (let attempt = 0; attempt < 10; attempt++) {
-    const tempClientId = `TEMP-${(Date.now() + attempt).toString().slice(-4)}`;
-    try {
-      newClient = await prisma.temporaryClient.create({
-        data: {
-          tempClientId,
-          companyName: companyName.trim(),
-          syncStatus: 'PENDING'
-        }
-      });
-      break;
-    } catch (error) {
-      if (error.code !== 'P2002' || attempt === 9) throw error;
+  const tempClientId = `TEMP-${Date.now().toString().slice(-4)}`;
+  const created = await prisma.temporaryClient.create({
+    data: {
+      tempClientId,
+      companyName: companyName.trim(),
+      syncStatus: 'PENDING'
     }
-  }
+  });
 
-  res.status(201).json({
-    clientId: newClient.tempClientId,
-    name: `${companyName.trim()} (Sementara)`
+  return res.status(201).json({
+    clientId: created.tempClientId,
+    code: created.tempClientId,
+    name: `${created.companyName} (Draf Sementara)`,
+    status: 'Aktif'
   });
 }));
 
