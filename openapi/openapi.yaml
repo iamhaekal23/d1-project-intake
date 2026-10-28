@@ -22,7 +22,7 @@ security:
 
 paths:
   # ============================================================================
-  # API-K01-08: DAFTAR PROYEK KANONIS
+  # API-K01-08: DAFTAR PROYEK KANONIS DENGAN PAGING & FILTER
   # ============================================================================
   /projects:
     get:
@@ -50,10 +50,10 @@ paths:
           required: false
           schema:
             type: integer
-            default: 10
+            default: 3
             minimum: 1
             maximum: 100
-          example: 10
+          example: 3
         - name: status
           in: query
           description: Filter status siklus proyek.
@@ -68,11 +68,11 @@ paths:
           example: REGISTERED
         - name: q
           in: query
-          description: Kata kunci pencarian berdasarkan nama proyek atau kode kanonis.
+          description: Kata kunci pencarian berdasarkan nama proyek, kode kanonis, atau nama klien.
           required: false
           schema:
             type: string
-          example: ERP Cloud
+          example: Modernisasi
       responses:
         '200':
           description: Daftar proyek kanonis berhasil diambil beserta metadata paginasi.
@@ -101,7 +101,7 @@ paths:
       summary: Mengambil rincian data tunggal proyek kanonis terpusat
       description: >-
         Mengembalikan metadata kanonis terverifikasi untuk satu proyek berdasarkan UUID v7 atau 
-        kode kanonis. Dikonsumsi oleh modul perencanaan teknis (E-3), penagihan invoice & termin (E-2), 
+        kode kanonis (YYYYXX). Dikonsumsi oleh modul perencanaan teknis (E-3), penagihan invoice & termin (E-2), 
         pengawasan risiko (E-5), evaluasi penutupan (D-3), dan finansial (E-1).
       operationId: getProjectById
       tags:
@@ -140,6 +140,47 @@ paths:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
 
+  # ============================================================================
+  # API-K01-09: UNDUH DOKUMEN BINER PDF PROJECT CHARTER (FTR-K01-08)
+  # ============================================================================
+  /projects/{projectId}/charter:
+    get:
+      summary: Mengunduh berkas biner PDF Project Charter ringkas
+      description: >-
+        Menerbitkan dan mengunduh berkas fisik PDF Project Charter resmi yang dibuat otomatis 
+        oleh sistem D-1. Operasi ini hanya diizinkan untuk proyek yang telah berstatus REGISTERED.
+      operationId: downloadProjectCharter
+      tags:
+        - Proyek Kanonis
+      parameters:
+        - name: projectId
+          in: path
+          required: true
+          description: Identifier unik proyek (UUID v7 atau Kode Kanonis).
+          schema:
+            type: string
+          example: 01924b1e-7f32-7a81-9b12-45e8a1234567
+      responses:
+        '200':
+          description: Berkas biner PDF Project Charter berhasil diterbitkan.
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        '400':
+          description: Proyek belum berstatus REGISTERED sehingga Project Charter belum sah diterbitkan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+        '404':
+          description: Proyek tidak ditemukan.
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ErrorResponse'
+
 components:
   securitySchemes:
     BearerAuth:
@@ -153,7 +194,6 @@ components:
       type: object
       required:
         - projectId
-        - canonicalCode
         - projectName
         - clientId
         - clientName
@@ -175,7 +215,8 @@ components:
         canonicalCode:
           type: string
           pattern: '^[0-9]{6}$'
-          description: Nomor proyek kanonis resmi format tahunan YYYYXX (contoh 202601).
+          nullable: true
+          description: Nomor proyek kanonis resmi format tahunan YYYYXX (contoh 202601) atau null jika proyek masih DRAFT/UNDER_REVIEW.
           example: "202601"
         projectName:
           type: string
@@ -192,7 +233,7 @@ components:
         amEmployeeId:
           type: string
           description: Referensi ID penanggung jawab Account Manager (dari modul F-1 / F-2).
-          example: 01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1
+          example: SDM-0012
         pmEmployeeId:
           type: string
           description: Referensi ID pegawai Project Manager yang ditunjuk (dari modul SDM F-2).
@@ -252,11 +293,11 @@ components:
         limit:
           type: integer
           description: Batas jumlah data yang ditampilkan per halaman.
-          example: 10
+          example: 3
         total:
           type: integer
           description: Total keseluruhan data proyek yang cocok dengan filter.
-          example: 20
+          example: 4
         totalPages:
           type: integer
           description: Total jumlah halaman yang tersedia.
