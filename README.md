@@ -2,7 +2,6 @@
 **ERP PT Anaheim Nimbus Universal — Kelompok 1-D**
 
 [![OpenAPI Spec](https://img.shields.io/badge/OpenAPI-3.0.3-brightgreen.svg)](openapi/openapi.yaml)
-[![Status](https://img.shields.io/badge/Status-Freeze%20UTS%20v0.2.0-blue.svg)](openapi/openapi.yaml)
 
 Repositori ini menyediakan aplikasi web manajemen *Project Intake* serta layanan REST API **Single Source of Truth (SSOT)** data proyek kanonis untuk seluruh modul di ekosistem ERP PT Anaheim Nimbus Universal:
 - **Konsumen Hilir (Outbound):** Modul **E-1** (Dasbor Manajemen), **E-2** (Kontrak & Penagihan), **E-3** (Perencanaan Teknis/WBS), **E-5** (Pengawasan Risiko), **D-3** (Penutupan Proyek), dan **F-2** (Penugasan SDM).
