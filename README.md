@@ -1,113 +1,178 @@
 # Modul D-1: Registrasi Proyek dan Project Intake
-
 **ERP PT Anaheim Nimbus Universal — Kelompok 1-D**
 
-Repositori ini menyediakan data proyek terpusat (*Single Source of Truth*) untuk seluruh kelompok atau modul ERP yang membutuhkan data proyek kanonis, yaitu E-1, E-2, E-3, E-5, D-3, dan F-2.
+[![OpenAPI Spec](https://img.shields.io/badge/OpenAPI-3.0.3-brightgreen.svg)](openapi/openapi.yaml)
+[![Status](https://img.shields.io/badge/Status-Freeze%20UTS%20v0.2.0-blue.svg)](openapi/openapi.yaml)
+
+Repositori ini menyediakan aplikasi web manajemen *Project Intake* serta layanan REST API **Single Source of Truth (SSOT)** data proyek kanonis untuk seluruh modul di ekosistem ERP PT Anaheim Nimbus Universal:
+- **Konsumen Hilir (Outbound):** Modul **E-1** (Dasbor Manajemen), **E-2** (Kontrak & Penagihan), **E-3** (Perencanaan Teknis/WBS), **E-5** (Pengawasan Risiko), **D-3** (Penutupan Proyek), dan **F-2** (Penugasan SDM).
+- **Penyedia Data Master (Inbound):** Terintegrasi melalui *Smart Adapter Proxy* (`src/mockService.js`) ke modul **F-1** (Autentikasi), **F-2** (Master SDM), dan **F-6** (CRM Klien) dengan mekanisme *auto-fallback* lokal.
 
 ---
 
-## 1. Cara Menjalankan Aplikasi Web
+## 1. Cara Menjalankan Aplikasi Web (Lokal)
 
-Pastikan Node.js dan npm telah terpasang pada perangkat sebelum menjalankan aplikasi.
-Pastikan `.env` berisi `DATABASE_URL="file:./dev.db"`; jika belum ada, salin `.env.example` menjadi `.env`.
+Pastikan **Node.js (v18+)** dan **npm** telah terpasang di perangkat Anda sebelum menjalankan aplikasi.
 
-1. **Pasang dependensi**
+1. **Kloning repositori & masuk ke direktori**
+   ```bash
+   git clone https://github.com/iamhaekal23/d1-project-intake.git
+   cd d1-project-intake
+   ```
+
+2. **Pasang seluruh dependensi**
    ```bash
    npm install
    ```
 
-2. **Buat atau terapkan skema database SQLite**
-   ```bash
-   npx prisma migrate deploy
+3. **Konfigurasi Environment (`.env`)**
+   Pastikan berkas `.env` tersedia di akar direktori (salin dari `.env.example` jika belum ada):
+   ```env
+   PORT=3000
+   DATABASE_URL="file:./dev.db"
+   F1_API_URL=http://localhost:3001
+   F2_API_URL=http://localhost:8080
+   F6_API_URL=http://localhost:3006
    ```
 
-3. **Muat data awal ke database SQLite**
+4. **Siapkan skema & muat data awal ke database SQLite**
    ```bash
+   npx prisma db push
    npm run db:seed
    ```
 
-4. **Jalankan server aplikasi**
+5. **Jalankan server aplikasi**
    ```bash
    npm start
    ```
 
-5. **Buka aplikasi melalui browser**
-
-   Akses alamat berikut:
-
-   `http://localhost:3000`
-
-Data proyek disimpan secara lokal di SQLite melalui Prisma ORM. Jalankan `npm run db:studio`
-untuk membuka Prisma Studio dan menjelajahi data database.
+6. **Akses aplikasi dan layanan**
+   - **Antarmuka Web (UI Dasbor):** `http://localhost:3000`
+   - **Base URL REST API:** `http://localhost:3000/api/v1`
+   - **Prisma Studio (Eksplorasi Database):** `npm run db:studio`
 
 ---
 
-## 2. Cara Menggunakan dan Menguji REST API
+## 2. Panduan Penggunaan dan Pengujian REST API
 
-Server lokal menyediakan REST API resmi untuk mengakses data proyek kanonis yang digunakan oleh kelompok konsumen ERP.
+Server lokal menyediakan REST API resmi untuk mengakses data proyek kanonis yang digunakan oleh kelompok konsumen ERP. Spesifikasi teknis lengkap tersedia pada berkas [`openapi/openapi.yaml`](openapi/openapi.yaml).
 
-### A. Mengambil Daftar Semua Proyek (Paging dan Filter)
+### Ringkasan Endpoint Modul D-1
 
-Endpoint ini digunakan oleh modul dasbor manajemen (E-1) dan penagihan komersial (E-2) untuk mengambil daftar proyek dengan dukungan paginasi dan filter.
+| ID API | Metode & Path | Kegunaan Utama | Konsumen |
+| :--- | :--- | :--- | :--- |
+| **API-K01-08** | `GET /api/v1/projects` | Mengambil daftar proyek dengan paginasi, pencarian, & filter status | E-1, E-2, Internal D-1 |
+| **API-K01-07** | `GET /api/v1/projects/{projectId}` | Mengambil rincian 1 proyek kanonis berdasarkan `canonicalCode` (`202601`) atau UUID `projectId` | E-2, E-3, E-5, D-3, F-2 |
+| **API-K01-01** | `POST /api/v1/projects` | Membuat draf proyek baru (`DRAFT`) | Internal D-1 (AM) |
+| **API-K01-02** | `PUT /api/v1/projects/{projectId}` | Memperbarui data draf proyek sebelum serah terima | Internal D-1 (AM) |
+| **API-K01-04** | `POST /api/v1/projects/{projectId}/handover` | Mengajukan serah terima proyek ke PM (`UNDER_REVIEW`) | Internal D-1 (AM) |
+| **API-K01-06** | `POST /api/v1/projects/{projectId}/approve` | Menyetujui proyek & menerbitkan kode kanonis (`REGISTERED`) | Internal D-1 (PM) |
+| **API-K01-05** | `POST /api/v1/projects/{projectId}/reject` | Menolak serah terima dengan catatan revisi (`REVISI_HANDOVER`) | Internal D-1 (PM) |
+| **API-K01-09** | `GET /api/v1/projects/{projectId}/charter` | Mengunduh dokumen resmi *Project Charter* (`.pdf`) | Internal D-1 (AM, PM, COO) |
 
-**Endpoint:**
+---
 
-`GET /api/v1/projects`
+### A. Mengambil Daftar Semua Proyek (`GET /api/v1/projects`)
 
-**Contoh URL — Paging:**
+Digunakan oleh modul dasbor manajemen (**E-1**) dan penagihan komersial (**E-2**) untuk mengambil daftar proyek dengan dukungan paginasi dan filter.
 
-`http://localhost:3000/api/v1/projects?page=1&limit=3`
+**Parameter Query (Opsional):**
+- `page` *(integer)*: Nomor halaman (default: `1`)
+- `limit` *(integer)*: Jumlah data per halaman (default: `3`)
+- `status` *(string)*: Filter status (`DRAFT`, `UNDER_REVIEW`, `REVISI_HANDOVER`, `REGISTERED`)
+- `q` *(string)*: Kata kunci pencarian nama proyek, klien, atau kode kanonis
 
-**Contoh URL — Filter Status:**
-
-`http://localhost:3000/api/v1/projects?status=REGISTERED`
+**Contoh URL:**
+- Paging: `http://localhost:3000/api/v1/projects?page=1&limit=3`
+- Filter Status: `http://localhost:3000/api/v1/projects?status=REGISTERED`
 
 **Pengujian menggunakan cURL:**
-
 ```bash
 curl -X GET "http://localhost:3000/api/v1/projects?page=1&limit=3"
 ```
-
 ```bash
 curl -X GET "http://localhost:3000/api/v1/projects?status=REGISTERED"
 ```
 
-**Tujuan pengujian:**
-- Memastikan daftar proyek berhasil ditampilkan.
-- Memastikan paginasi berdasarkan parameter `page` dan `limit` berjalan.
-- Memastikan filter `status=REGISTERED` menampilkan proyek dengan status yang sesuai.
-
-### B. Mengambil Detail Proyek Tertentu (API-K01-07)
-
-Endpoint ini digunakan oleh modul E-2, E-3, E-5, D-3, dan F-2 untuk membaca detail resmi proyek berdasarkan ID proyek.
-
-**Endpoint:**
-
-`GET /api/v1/projects/{projectId}`
-
-**Contoh URL:**
-
-`http://localhost:3000/api/v1/projects/202601`
-
-**Pengujian menggunakan cURL:**
-
-```bash
-curl -X GET "http://localhost:3000/api/v1/projects/202601"
+**Contoh Respons Sukses (`200 OK`):**
+```json
+{
+  "data": [
+    {
+      "projectId": "01924b1e-7f32-7a81-9b12-45e8a1234567",
+      "canonicalCode": "202601",
+      "projectName": "Implementasi Sistem ERP Cloud Anaheim Tahap 1",
+      "clientId": "PTANTRI",
+      "clientName": "PT Anaheim Nimbus Universal",
+      "amEmployeeId": "01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1",
+      "pmEmployeeId": "01929b4a-5f10-7a22-9d44-3c8f1b2e7a90",
+      "startDate": "2026-10-15",
+      "targetEndDate": "2027-04-15",
+      "documentsComplete": true,
+      "poReceived": true,
+      "status": "REGISTERED",
+      "createdAt": "2026-10-13T09:00:00+07:00",
+      "updatedAt": "2026-10-13T11:30:00+07:00"
+    }
+  ],
+  "meta": {
+    "page": 1,
+    "limit": 3,
+    "total": 4,
+    "totalPages": 2
+  }
+}
 ```
-
-**Tujuan pengujian:**
-- Memastikan detail proyek dengan ID `202601` dapat diakses.
-- Memastikan data yang dikembalikan sesuai dengan data proyek kanonis.
-- Memastikan endpoint memberikan respons yang sesuai apabila proyek tidak ditemukan.
 
 ---
 
-## 3. Bukti Demo Pertemuan 4
+### B. Mengambil Detail Proyek Tertentu (`GET /api/v1/projects/{projectId}`)
 
-Tangkapan layar hasil pengujian aplikasi dan REST API disimpan pada direktori berikut:
+Digunakan oleh modul **E-2, E-3, E-5, D-3,** dan **F-2** untuk membaca detail resmi proyek berdasarkan Kode Kanonis 6 digit (misal: `202601`) maupun UUID v7 (`projectId`). Endpoint ini juga menyediakan atribut `poReceived` untuk memvalidasi ketersediaan PO fisik tanpa membocorkan nilai komersial internal (`indicativeValue`).
 
-```text
-docs/evidence/pertemuan4demo
+**Contoh URL:**
+`http://localhost:3000/api/v1/projects/202601`
+
+**Pengujian menggunakan cURL:**
+```bash
+curl -X GET "http://localhost:3000/api/v1/projects/202601" \
+     -H "Authorization: Bearer mock-jwt-token-f1-account-manager-2026"
 ```
 
-Direktori tersebut digunakan untuk mendokumentasikan bukti pengujian alur aplikasi lokal pada Pertemuan 4.
+**Contoh Respons Gagal jika ID Tidak Ditemukan (`404 Not Found`):**
+```json
+{
+  "code": "PROJECT_NOT_FOUND",
+  "message": "Data proyek dengan ID 999999 tidak ditemukan di sistem intake",
+  "details": {
+    "requestedProjectId": "999999"
+  }
+}
+```
+
+---
+
+### C. Integrasi Endpoint Referensi Hulu (Inbound)
+
+Backend Modul D-1 menyediakan rute adapter menuju layanan data induk:
+- **Referensi SDM (F-2):** `GET http://localhost:3000/api/v1/referensi/sdm` (Terhubung ke server F-2 di `http://localhost:8080/api/v1/sdm` dengan `Bearer token-coo`).
+- **Referensi Klien (F-6):** `GET http://localhost:3000/api/v1/clients` & `POST http://localhost:3000/api/v1/temporary-clients` (Fitur Draf Klien Sementara).
+
+---
+
+## 3. Dokumentasi Bukti Pengujian
+
+Tangkapan layar hasil pengujian aplikasi dan REST API disimpan pada direktori berikut:
+- **Pertemuan 4 (Demo Alur Lokal Pertama):** [`docs/evidence/pertemuan4demo/`](docs/evidence/pertemuan4demo)
+- **Pertemuan 5 (Operasi Data, Validasi, & Integrasi Endpoint):** [`docs/evidence/pertemuan-5/`](docs/evidence/pertemuan-5)
+
+---
+
+## 4. Tim Pengembang (Kelompok 1 / Kelas D)
+
+- **Haekal Khadafy**
+- **Fikri Lazuardi Fadilla**
+- **Fadhilah Aditya Ahmad**
+- **Nayara Christony Paul Barriga**
+- **Muhammad Yafi Nasrulloh**
+- **Rama Sadea Putra**
