@@ -5,9 +5,9 @@ const prisma = require('./prisma');
 const asyncHandler = require('./asyncHandler');
 
 // Konfigurasi URL Server Mitra dari Environment Variable
-const F1_BASE = process.env.F1_API_URL || 'http://localhost:3001';
+const F1_BASE = process.env.F1_API_URL || 'http://localhost:4100';
 const F2_BASE = process.env.F2_API_URL || 'http://localhost:8080';
-const F6_BASE = process.env.F6_API_URL || 'http://localhost:3006';
+const F6_BASE = process.env.F6_API_URL || 'http://localhost:8000';
 
 // Data Cadangan Lokal Klien (Fallback F-6)
 const FALLBACK_CLIENTS = [
@@ -48,38 +48,58 @@ async function fetchWithTimeout(url, options = {}, timeoutMs = 2500) {
 }
 
 // ============================================================================
-// 1. INTEGRASI F-1: IDENTITAS, AKUN & AUTENTIKASI (POST /api/v1/auth/login)
+// INTEGRASI F-1: IDENTITAS & AUTENTIKASI (PORT 4100)
 // ============================================================================
 router.post('/auth/login', asyncHandler(async (req, res) => {
-  const { email, password } = req.body;
+  const { email, password, emailOrUsername } = req.body;
+  const targetUser = emailOrUsername || email;
 
-  // Coba teruskan ke server F-1 nyata jika tersedia
   if (F1_BASE) {
     try {
-      const extRes = await fetchWithTimeout(`${F1_BASE}/api/v1/auth/login`, {
+      const extRes = await fetchWithTimeout(`${F1_BASE}/auth/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ email, password })
-      });
+        body: JSON.stringify({
+          emailOrUsername: targetUser,
+          password: password
+        })
+      }, 3000);
 
+      const data = await extRes.json();
       if (extRes.ok) {
-        const data = await extRes.json();
-        console.log('[D-1 Integrasi] Berhasil autentikasi via peladen F-1 nyata');
-        return res.json(data);
+        console.log(`[D-1 Integrasi] ✓ Berhasil login via peladen F-1 nyata (${targetUser}) - HTTP 200 OK`);
+        return res.json({
+          accessToken: data.accessToken,
+          tokenType: data.tokenType || 'Bearer',
+          expiresIn: data.expiresIn,
+          user: {
+            akunId: data.accountId,
+            namaLengkap: targetUser === 'yuril.salsabila' ? 'Yuril Salsabila' : targetUser,
+            email: targetUser,
+            peran: data.roleCode === 'COO' ? 'AM' : data.roleCode,
+            roleCode: data.roleCode
+          }
+        });
+      } else {
+        console.warn(`[D-1 Integrasi] Peladen F-1 menolak login: ${data.message || data.code}`);
+        return res.status(extRes.status).json(data);
       }
     } catch (err) {
-      console.warn('[D-1 Integrasi] Peladen F-1 tidak merespons. Mengaktifkan sesi mock lokal.');
+      console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-1. Mengaktifkan fallback lokal.');
     }
   }
 
-  // Fallback sesi lokal akun Account Manager (AM)
+  // Fallback lokal jika F-1 luring
   return res.json({
-    token: 'mock-jwt-token-f1-account-manager-2026',
+    accessToken: 'mock-jwt-token-f1-account-manager-2026',
+    tokenType: 'Bearer',
+    expiresIn: 3600,
     user: {
       akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
       namaLengkap: 'Andi Maulana',
-      email: email || 'andi@anaheim.local',
-      peran: 'AM'
+      email: targetUser || 'andi@anaheim.local',
+      peran: 'AM',
+      roleCode: 'AM'
     }
   });
 }));
@@ -141,33 +161,41 @@ router.get('/sdm', handleF2Employees);
 router.get('/employees', handleF2Employees);
 
 // ============================================================================
-// 3. INTEGRASI F-6: MASTER CRM KLIEN & KLIEN SEMENTARA (GET /api/v1/clients)
+// INTEGRASI F-6: MASTER CRM KLIEN (PORT 8000)
 // ============================================================================
 router.get('/clients', asyncHandler(async (req, res) => {
   let standardClients = FALLBACK_CLIENTS;
+  let apiStatus = 'FALLBACK_ONLY';
 
-  // Coba ambil data klien nyata dari F-6
+  // 1. Panggil peladen jaringan nyata F-6 (Laravel)
   if (F6_BASE) {
     try {
       const extRes = await fetchWithTimeout(`${F6_BASE}/api/v1/clients?status=Aktif`, {
         method: 'GET',
         headers: { 'Accept': 'application/json' }
-      }, 2500);
+      }, 3000);
 
       if (extRes.ok) {
         const result = await extRes.json();
+        console.log(`[D-1 Integrasi] ✓ Berhasil terhubung ke peladen F-6 nyata (${F6_BASE}) - HTTP 200 OK`);
+        
         const rawClients = result.data || result.items || [];
         if (Array.isArray(rawClients) && rawClients.length > 0) {
-          console.log(`[D-1 Integrasi] Berhasil menarik ${rawClients.length} data klien dari peladen F-6.`);
           standardClients = rawClients;
+          apiStatus = 'F6_LIVE_DATA';
+        } else {
+          console.log('[D-1 Integrasi] Info: Basis data F-6 masih kosong ([]). Menggabungkan dengan referensi lokal agar form tetap siap diuji.');
+          apiStatus = 'F6_LIVE_CONNECTED_EMPTY_DB';
         }
+      } else {
+        console.warn(`[D-1 Integrasi] Peladen F-6 merespons status HTTP ${extRes.status}`);
       }
     } catch (err) {
       console.warn('[D-1 Integrasi] Gagal menghubungi peladen F-6. Menggunakan data cadangan lokal.');
     }
   }
 
-  // Ambil draf klien sementara yang disimpan di database lokal D-1 (Mitigasi Q-09)
+  // 2. Muat draf klien sementara lokal jika ada (Mitigasi Q-09)
   const tempClients = await prisma.temporaryClient.findMany({
     orderBy: { createdAt: 'desc' }
   });
@@ -180,10 +208,10 @@ router.get('/clients', asyncHandler(async (req, res) => {
   }));
 
   const combined = [...standardClients, ...mappedTemp];
-  return res.json({
+  res.json({
     data: combined,
-    items: combined,
-    meta: { page: 1, limit: 50, total: combined.length }
+    meta: { page: 1, limit: 50, total: combined.length },
+    integrationSource: apiStatus
   });
 }));
 
