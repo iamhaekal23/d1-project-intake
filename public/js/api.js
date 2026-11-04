@@ -1,10 +1,16 @@
+// public/js/api.js - Layanan Klien API Modul D1 & Integrasi F1/F2/F6
 const API_BASE = '/api/v1';
 
 async function request(path, options = {}) {
+  // Ambil token JWT F1 dari localStorage jika sesi aktif
+  const token = localStorage.getItem('token');
+  const authHeaders = token ? { 'Authorization': `Bearer ${token}` } : {};
+
   const response = await fetch(`${API_BASE}${path}`, {
     headers: {
       'Content-Type': 'application/json',
       'Accept': 'application/json',
+      ...authHeaders,
       ...(options.headers || {})
     },
     ...options
@@ -20,6 +26,19 @@ async function request(path, options = {}) {
   return data;
 }
 
+// ============================================================================
+// 1. AUTENTIKASI F1 (IDENTITAS & HAK AKSES)
+// ============================================================================
+export async function loginF1(emailOrUsername = 'account.manager', password = 'Password123!') {
+  return request('/auth/login', {
+    method: 'POST',
+    body: JSON.stringify({ emailOrUsername, password })
+  });
+}
+
+// ============================================================================
+// 2. PROYEK KANONIS (MODUL D1)
+// ============================================================================
 export async function fetchProjects(params = {}) {
   const query = new URLSearchParams();
   if (params.page) query.set('page', String(params.page));
@@ -68,26 +87,22 @@ export async function approveProject(projectId) {
 }
 
 export async function rejectProject(projectId, notes) {
-  const res = await fetch(`/api/v1/projects/${projectId}/reject`, {
+  return request(`/projects/${encodeURIComponent(projectId)}/reject`, {
     method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ 
       notes: notes,
       reason: notes 
     })
   });
-
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.message || 'Gagal menolak handover proyek');
-  }
-  return data;
 }
 
 export function getProjectCharterUrl(projectId) {
   return `${API_BASE}/projects/${encodeURIComponent(projectId)}/charter`;
 }
 
+// ============================================================================
+// 3. INTEGRASI REFERENSI HULU (F6 CRM & F2 MASTER SDM)
+// ============================================================================
 export async function fetchClients() {
   return request('/clients');
 }

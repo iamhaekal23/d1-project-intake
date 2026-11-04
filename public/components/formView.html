@@ -36,58 +36,73 @@
           <label class="block text-xs font-bold text-slate-700 mb-1.5">
             Nama Proyek <span class="text-rose-500">*</span>
           </label>
-          <input type="text" id="projectName" placeholder="Pengadaan Jaringan Cabang" class="w-full border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 outline-none transition">
+          <input type="text" id="projectName" placeholder="Contoh: Implementasi Sistem ERP Cloud" class="w-full border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 outline-none transition">
           <p id="errProjectName" class="text-[11px] text-rose-600 font-medium mt-1 hidden"></p>
         </div>
 
         <!-- 2. Pilih Klien (F-6 CRM) -->
         <div>
-          <label class="block text-xs font-bold text-slate-700 mb-1.5">
-            Pilih Klien (F-6 CRM) <span class="text-rose-500">*</span>
-          </label>
+          <div class="flex justify-between items-center mb-1.5">
+            <label class="block text-xs font-bold text-slate-700">
+              Pilih Klien (F-6 CRM) <span class="text-rose-500">*</span>
+            </label>
+            <button type="button" id="btnOpenClientModal" class="text-xs text-blue-700 hover:text-blue-900 font-bold transition">
+              + Tambah Klien Sementara
+            </button>
+          </div>
           <select id="clientSelect" class="w-full border border-slate-200 bg-slate-50/50 hover:bg-white focus:bg-white px-3.5 py-2.5 rounded-lg text-xs font-medium text-slate-800 focus:ring-1 focus:ring-slate-400 outline-none transition">
-            <!-- Diisi dari api.js -->
+            <!-- Diisi dinamis oleh FormView.loadMasterData() -->
           </select>
           <p class="text-[11px] text-slate-400 mt-1">Klien sementara dapat dilengkapi dan divalidasi melalui tim CRM kemudian.</p>
         </div>
 
-        <!-- Estimasi Mulai & Selesai (Awal Kosong) -->
+        <!-- 3. Estimasi Mulai & Target Selesai -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Estimasi Mulai <span class="text-rose-500">*</span></label>
-            <input type="date" id="startDate" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white">
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Estimasi Mulai <span class="text-rose-500">*</span>
+            </label>
+            <input type="date" id="startDate" class="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white">
             <p id="errStartDate" class="text-[11px] text-rose-600 mt-1 hidden"></p>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Estimasi Selesai <span class="text-rose-500">*</span></label>
-            <input type="date" id="targetEndDate" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white">
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Estimasi Selesai <span class="text-rose-500">*</span>
+            </label>
+            <input type="date" id="targetEndDate" class="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white">
             <p id="errTargetEndDate" class="text-[11px] text-rose-600 mt-1 hidden"></p>
           </div>
         </div>
 
-        <!-- Nilai Indikatif (Awal Rp 0) & PM Tujuan -->
+        <!-- 4. Nilai Indikatif & PM Tujuan (F-2 SDM) -->
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">Nilai Indikatif (Rp) <span class="text-rose-500">*</span></label>
-            <input type="text" id="indicativeValueDisplay" placeholder="Rp 0" value="Rp 0" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white font-medium">
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              Nilai Indikatif (Rp) <span class="text-rose-500">*</span>
+            </label>
+            <input type="text" id="indicativeValueDisplay" placeholder="Rp 0" value="Rp 0" class="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white font-medium">
             <input type="hidden" id="indicativeValue" value="0">
             <p class="text-[11px] text-slate-400 mt-1">Nilai estimasi awal; bukan nilai kontrak final.</p>
           </div>
           <div>
-            <label class="block text-xs font-bold text-slate-700 mb-1">PM Tujuan (F-2) <span class="text-rose-500">*</span></label>
-            <select id="pmSelect" class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white"></select>
+            <label class="block text-xs font-bold text-slate-700 mb-1">
+              PM Tujuan (F-2) <span class="text-rose-500">*</span>
+            </label>
+            <select id="pmSelect" class="w-full px-3.5 py-2.5 text-xs border border-slate-200 rounded-lg focus:outline-none focus:ring-1 focus:ring-blue-600 focus:border-blue-600 bg-white">
+              <!-- Diisi dinamis oleh FormView.loadMasterData() -->
+            </select>
             <p class="text-[11px] text-slate-400 mt-1">Project Manager penerima handover.</p>
           </div>
         </div>
 
-        <!-- AM (auto) -->
+        <!-- 5. AM (Otomatis dari Akun Aktif F-1) -->
         <div>
           <label class="block text-xs font-bold text-slate-700 mb-1">AM (auto)</label>
-          <input type="text" value="Andi Maulana" disabled class="w-full px-3 py-2 text-xs border border-slate-200 rounded-lg bg-slate-50 text-slate-500 cursor-not-allowed">
-          <p class="text-[11px] text-slate-400 mt-1">Diisi otomatis dari akun aktif.</p>
+          <input type="text" id="amName" name="amName" value="Fikri Lazuardi Fadilla" class="w-full bg-slate-50 border border-slate-200 rounded-xl px-3.5 py-2.5 text-xs text-slate-600 font-semibold cursor-not-allowed select-none focus:outline-none" readonly>
+          <p class="text-[11px] text-slate-400 mt-1">Diisi otomatis berdasarkan token identitas akun F-1 yang aktif.</p>
         </div>
 
-        <!-- KOTAK INFORMASI PENERBITAN KODE PROYEK (Desain Banner Biru Informatif) -->
+        <!-- Kotak Informasi Penerbitan Kode Kanonis -->
         <div class="p-4 rounded-xl bg-blue-50/70 border border-blue-200/80 flex items-start space-x-3 text-blue-900">
           <div class="w-5 h-5 rounded-full bg-blue-600 text-white flex items-center justify-center text-xs font-bold flex-shrink-0 mt-0.5">
             i
@@ -100,7 +115,7 @@
           </div>
         </div>
 
-        <!-- 7. Bar Tombol Aksi di Bagian Bawah Formulir -->
+        <!-- Tombol Aksi Formulir -->
         <div class="flex items-center justify-between pt-4 border-t border-slate-100">
           <button type="button" id="btnCancelCreate" class="px-5 py-2.5 rounded-lg border border-slate-200 hover:bg-slate-50 text-slate-700 text-xs font-semibold transition">
             Batal
@@ -122,7 +137,7 @@
     <!-- ==================== KOLOM KANAN: PANDUAN ALUR & MODAL CRM ==================== -->
     <div class="space-y-5">
       
-      <!-- Panel Alur Registrasi (4 Langkah) -->
+      <!-- Panel Alur Registrasi -->
       <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
         <div>
           <h3 class="text-xs font-bold text-slate-900">Alur Registrasi</h3>
@@ -176,7 +191,7 @@
         </div>
       </div>
 
-      <!-- Kotak Tambah Klien Sementara (Callout CRM) -->
+      <!-- Kotak Tambah Klien Sementara (Callout CRM F-6) -->
       <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-3">
         <div class="w-8 h-8 rounded-lg bg-slate-50 text-slate-600 flex items-center justify-center border border-slate-200/60">
           <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -189,7 +204,7 @@
             Tambahkan klien sementara tanpa meninggalkan formulir. Tim CRM akan melengkapi data master instansi.
           </p>
         </div>
-        <button type="button" id="btnOpenClientModal" class="text-xs text-[#152a4a] hover:text-blue-800 font-bold block pt-1 transition">
+        <button type="button" id="btnOpenClientModalCard" class="text-xs text-[#152a4a] hover:text-blue-800 font-bold block pt-1 transition">
           Referensi modul · F-6 CRM
         </button>
       </div>

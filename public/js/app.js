@@ -1,8 +1,8 @@
-// public/js/app.js - Main Router & State Orchestrator
+// public/js/app.js - Main Router & State Orchestrator Modul D-1
 import { DashboardView } from './views/dashboard.js';
 import { FormView } from './views/form.js';
 import { DetailView } from './views/detail.js';
-import { fetchProjectById } from './api.js';
+import { fetchProjectById, loginF1 } from './api.js';
 
 class AppRouter {
   constructor() {
@@ -12,8 +12,15 @@ class AppRouter {
     this.templates = {};
     this.currentView = null;
     this._toastTimer = null;
+    this.currentUser = JSON.parse(localStorage.getItem('user')) || {
+      akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+      namaLengkap: 'Fikri Lazuardi Fadilla',
+      email: 'account.manager@anaheimnimbus.co.id',
+      peran: 'AM'
+    };
   }
 
+  // Notifikasi Toast Global
   showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
@@ -40,6 +47,7 @@ class AppRouter {
     }, 4000);
   }
 
+  // Prapemuatan seluruh template HTML dari public/components/
   async loadComponents() {
     try {
       const [dashHtml, formHtml, detailHtml, modalHtml] = await Promise.all([
@@ -60,10 +68,82 @@ class AppRouter {
       }
     } catch (err) {
       console.error('Gagal memuat template antarmuka:', err);
+      this.showToast('Gagal memuat template antarmuka modular', true);
     }
   }
 
-  // Tampilan Dasbor
+  // Pembaruan profil akun aktif di sidebar
+  updateSidebarProfile(user = null) {
+    const currentUser = user || this.currentUser || JSON.parse(localStorage.getItem('user')) || {
+      namaLengkap: 'Fikri Lazuardi Fadilla',
+      peran: 'AM'
+    };
+
+    let nameEl = document.getElementById('sidebarUserName');
+    let roleEl = document.getElementById('sidebarUserRole');
+    let avatarEl = document.getElementById('sidebarUserAvatar');
+
+    // Pencarian elemen otomatis jika ID belum terpasang di HTML sidebar
+    if (!nameEl) {
+      const candidates = document.querySelectorAll('aside .text-white.leading-tight, aside .font-semibold.text-white');
+      for (const el of candidates) {
+        if (el.textContent.includes('Andi') || el.textContent.includes('Fikri') || el.textContent.includes('Account')) {
+          nameEl = el;
+          nameEl.id = 'sidebarUserName';
+          break;
+        }
+      }
+    }
+
+    if (!roleEl) {
+      const candidates = document.querySelectorAll('aside .text-slate-400, aside .text-\\[10px\\].text-slate-400');
+      for (const el of candidates) {
+        if (el.textContent.includes('Account Manager') || el.textContent.includes('AM')) {
+          roleEl = el;
+          roleEl.id = 'sidebarUserRole';
+          break;
+        }
+      }
+    }
+
+    if (!avatarEl) {
+      const candidates = document.querySelectorAll('aside .w-8.h-8, aside .w-9.h-9, aside .rounded-lg, aside .rounded-full');
+      for (const el of candidates) {
+        const txt = el.textContent.trim();
+        if (txt === 'AM' || txt === 'FL') {
+          avatarEl = el;
+          avatarEl.id = 'sidebarUserAvatar';
+          break;
+        }
+      }
+    }
+
+    if (nameEl) nameEl.textContent = currentUser.namaLengkap || 'Fikri Lazuardi Fadilla';
+    if (roleEl) roleEl.textContent = currentUser.peran === 'AM' ? 'Account Manager' : (currentUser.peran || 'Pengguna');
+    if (avatarEl && currentUser.namaLengkap) {
+      const initials = currentUser.namaLengkap.split(' ').map(n => n[0]).slice(0, 2).join('');
+      avatarEl.textContent = initials.toUpperCase();
+    }
+  }
+
+  // Sinkronisasi Sesi Autentikasi dengan API F-1
+  async syncProfileWithF1() {
+    try {
+      const authData = await loginF1('account.manager', 'Password123!');
+      if (authData?.user) {
+        localStorage.setItem('token', authData.accessToken || authData.token);
+        localStorage.setItem('user', JSON.stringify(authData.user));
+        this.currentUser = authData.user;
+        this.updateSidebarProfile(this.currentUser);
+        console.log(`[D-1] Profil akun tersinkronisasi (${authData.source || 'F1'}):`, this.currentUser);
+      }
+    } catch (err) {
+      console.warn('[D-1] Menggunakan sesi akun lokal (F-1 offline):', err.message);
+      this.updateSidebarProfile();
+    }
+  }
+
+  // Tampilan Dasbor Proyek (UI-K01-01)
   async navigateToDashboard() {
     this.currentView = 'dashboard';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Dasbor proyek';
@@ -105,8 +185,8 @@ class AppRouter {
           `"${p.projectId || ''}"`,
           `"${(p.projectName || '').replace(/"/g, '""')}"`,
           `"${(p.clientName || p.clientId || '').replace(/"/g, '""')}"`,
-          `"${p.amName || 'Andi Maulana'}"`,
-          `"${p.pmName || 'Budi Santoso'}"`,
+          `"${p.amName || 'Fikri Lazuardi Fadilla'}"`,
+          `"${p.pmName || 'Haekal Khadafy'}"`,
           `"${p.startDate || '—'}"`,
           `"${p.targetEndDate || '—'}"`,
           `"${Number(p.indicativeValue || 0)}"`,
@@ -151,13 +231,14 @@ class AppRouter {
     statusFilter?.addEventListener('change', handleFilter);
     amPmFilter?.addEventListener('change', handleFilter);
 
+    // Render data tabel dan kartu metrik
     await DashboardView.render(
       (id) => this.navigateToDetail(id),
       (id) => this.navigateToEdit(id)
     );
   }
 
-  // Tampilan Form Registrasi Draf Baru
+  // Tampilan Form Registrasi Draf Baru (UI-K01-02)
   async navigateToCreate() {
     this.currentView = 'create';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Draf proyek baru';
@@ -168,7 +249,7 @@ class AppRouter {
     this.attachFormEvents();
   }
 
-  // Tampilan Form Ubah Draf
+  // Tampilan Form Ubah Draf (UI-K01-02 Edit Mode)
   async navigateToEdit(projectId) {
     this.currentView = 'edit';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Ubah draf proyek';
@@ -176,7 +257,8 @@ class AppRouter {
 
     await FormView.loadMasterData();
     try {
-      const proj = await fetchProjectById(projectId);
+      const res = await fetchProjectById(projectId);
+      const proj = res.data || res;
       FormView.populateForEdit(proj);
       this.attachFormEvents();
     } catch (err) {
@@ -185,6 +267,7 @@ class AppRouter {
     }
   }
 
+  // Event listener tombol aksi form
   attachFormEvents() {
     document.getElementById('btnBackFromCreate')?.addEventListener('click', () => this.navigateToDashboard());
     document.getElementById('btnCancelCreate')?.addEventListener('click', () => this.navigateToDashboard());
@@ -219,7 +302,7 @@ class AppRouter {
     );
   }
 
-  // Tampilan Rincian Proyek (WI-01 & PM)
+  // Tampilan Rincian Proyek & Dokumen WI-01 (UI-K01-03)
   async navigateToDetail(projectId) {
     this.currentView = 'detail';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Detail proyek';
@@ -235,22 +318,38 @@ class AppRouter {
     await DetailView.loadAndRender(projectId, (msg, isErr) => this.showToast(msg, isErr));
   }
 
+  // Inisialisasi awal saat halaman dibuka
   async init() {
+    this.updateSidebarProfile();
     await this.loadComponents();
 
-    // Link Sidebar
-    document.getElementById('navProjectIntake')?.addEventListener('click', (e) => {
-      e.preventDefault();
-      this.navigateToDashboard();
+    // Link Sidebar & Header
+    ['navProjectIntake', 'menuIntake'].forEach(id => {
+      document.getElementById(id)?.addEventListener('click', (e) => {
+        e.preventDefault();
+        this.navigateToDashboard();
+      });
     });
+
     document.getElementById('breadcrumbRoot')?.addEventListener('click', () => {
       this.navigateToDashboard();
     });
 
+    document.getElementById('btnLogout')?.addEventListener('click', () => {
+      localStorage.removeItem('user');
+      localStorage.removeItem('token');
+      location.reload();
+    });
+
+    // Render dasbor terlebih dahulu agar tidak ada jeda tampilan
     await this.navigateToDashboard();
+
+    // Jalankan sinkronisasi F-1 secara asynchronous di latar belakang
+    this.syncProfileWithF1();
   }
 }
 
+// Jalankan Router Aplikasi
 document.addEventListener('DOMContentLoaded', () => {
   const router = new AppRouter();
   router.init();
