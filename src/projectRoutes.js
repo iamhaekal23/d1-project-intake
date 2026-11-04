@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const prisma = require('./prisma');
-const crypto = require('crypto'); // Gunakan pustaka bawaan Node.js
+const crypto = require('crypto');
 
 // Pembangkit UUID v7 standar RFC 9562
 function generateUuidV7() {
@@ -22,12 +22,83 @@ function generateUuidV7() {
   return `${hex.slice(0, 8)}-${hex.slice(8, 12)}-${hex.slice(12, 16)}-${hex.slice(16, 20)}-${hex.slice(20)}`;
 }
 
+// Regex format UUID (RFC 4122 / RFC 9562)
+const UUID_REGEX = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
 // Format standar respons galat OpenAPI
 const sendError = (res, statusCode, code, message, details = {}) => {
   return res.status(statusCode).json({ code, message, details });
 };
 
-// 1. GET /api/v1/projects - Koleksi Proyek (Dukungan Paging Konsumen E-2 & Dasbor)
+// Middleware Pemeriksaan Bearer Token (Penyelesaian INT-01)
+const authenticateToken = (req, res, next) => {
+  const authHeader = req.headers['authorization'];
+  if (!authHeader || !authHeader.startsWith('Bearer ')) {
+    return sendError(
+      res,
+      401,
+      'UNAUTHORIZED',
+      'Akses ditolak: Header Authorization Bearer token wajib disertakan',
+      { header: 'Authorization' }
+    );
+  }
+
+  const token = authHeader.split(' ')[1];
+  if (!token || token.trim() === '') {
+    return sendError(
+      res,
+      401,
+      'UNAUTHORIZED',
+      'Akses ditolak: Token Bearer tidak valid atau kosong',
+      { header: 'Authorization' }
+    );
+  }
+
+  req.token = token;
+  next();
+};
+
+// Konversi Timestamp ke Format ISO 8601 dengan Offset WIB (+07:00) (Penyelesaian INT-04)
+function formatWib(date) {
+  if (!date) return null;
+  const d = new Date(date);
+  const wibTime = new Date(d.getTime() + (7 * 60 * 60 * 1000));
+  const YYYY = wibTime.getUTCFullYear();
+  const MM = String(wibTime.getUTCMonth() + 1).padStart(2, '0');
+  const DD = String(wibTime.getUTCDate()).padStart(2, '0');
+  const hh = String(wibTime.getUTCHours()).padStart(2, '0');
+  const mm = String(wibTime.getUTCMinutes()).padStart(2, '0');
+  const ss = String(wibTime.getUTCSeconds()).padStart(2, '0');
+  return `${YYYY}-${MM}-${DD}T${hh}:${mm}:${ss}+07:00`;
+}
+
+// Serializer Objek Proyek Kanonis Resmi (Penyelesaian INT-03, INT-04, INT-06 & Dukungan E-5)
+function toCanonicalProjectResponse(project) {
+  return {
+    projectId: project.projectId,
+    canonicalCode: project.canonicalCode || null,
+    projectName: project.projectName,
+    clientId: project.clientId,
+    clientName: project.clientName,
+    amEmployeeId: project.amEmployeeId,
+    amName: project.amName || 'Fikri Lazuardi Fadilla (AM)',
+    pmEmployeeId: project.pmEmployeeId,
+    pmName: project.pmName || 'Sandy Walsh',
+    startDate: project.startDate,
+    targetEndDate: project.targetEndDate,
+    documentsComplete: Boolean(project.documentsComplete),
+    poReceived: Boolean(project.poReceived),
+    status: project.status,
+    active: project.status === 'REGISTERED', // Kebutuhan modul E-5
+    createdAt: formatWib(project.createdAt),
+    updatedAt: formatWib(project.updatedAt)
+    // indicativeValue, auditLogs, dan rejectionNotes sengaja tidak disertakan (Perlindungan INT-03)
+  };
+}
+
+// ============================================================================
+// 1. GET /api/v1/projects - Koleksi Proyek (Paging Konsumen E-2 & Dasbor D-1)
+// ============================================================================
 router.get('/projects', async (req, res) => {
   try {
     const page = Math.max(1, parseInt(req.query.page) || 1);
@@ -47,7 +118,7 @@ router.get('/projects', async (req, res) => {
       ];
     }
 
-    const [total, projects] = await Promise.all([
+    const [total, rawProjects] = await Promise.all([
       prisma.project.count({ where }),
       prisma.project.findMany({
         where,
@@ -59,7 +130,8 @@ router.get('/projects', async (req, res) => {
     ]);
 
     res.json({
-      data: projects,
+      data: rawProjects,
+      items: rawProjects,
       meta: {
         total,
         page,
@@ -72,54 +144,74 @@ router.get('/projects', async (req, res) => {
   }
 });
 
+// ============================================================================
 // 2. GET /api/v1/projects/:projectId - Detail Proyek Kanonis (API-K01-07)
-router.get('/projects/:projectId', async (req, res) => {
+// ============================================================================
+router.get('/projects/:projectId', authenticateToken, async (req, res) => {
   try {
     const { projectId } = req.params;
+
+    // 1. Validasi Format Parameter: Wajib UUID (Penyelesaian INT-02)
+    if (!UUID_REGEX.test(projectId)) {
+      return sendError(
+        res,
+        400,
+        'INVALID_PROJECT_ID_FORMAT',
+        `Format projectId '${projectId}' tidak valid. Parameter harus berupa UUID v7`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    // 2. Pencarian Berdasarkan UUID Primer
+    const project = await prisma.project.findUnique({
+      where: { projectId }
+    });
+
+    // 3. Penanganan Jika Data Tidak Ditemukan
+    if (!project) {
+      return sendError(
+        res,
+        404,
+        'PROJECT_NOT_FOUND',
+        `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    // 4. Kembalikan Respons Bersih Melalui Serializer Kanonis
+    res.json(toCanonicalProjectResponse(project));
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
+  }
+});
+
+// ============================================================================
+// 3. GET /api/v1/projects/:projectId/charter - Unduh PDF Project Charter
+// ============================================================================
+router.get('/projects/:projectId/charter', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
     const project = await prisma.project.findFirst({
       where: {
         OR: [
           { projectId: projectId },
           { canonicalCode: projectId }
         ]
-      },
-      include: { auditLogs: { orderBy: { timestamp: 'desc' } } }
+      }
     });
 
     if (!project) {
-      return sendError(
-        res,
-        404,
-        'PROJECT_NOT_FOUND',
-        `Data proyek dengan ID/Kode ${projectId} tidak ditemukan di sistem intake`,
-        { requestedProjectId: projectId }
-      );
-    }
-
-    res.json(project);
-  } catch (err) {
-    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
-  }
-});
-
-// GET /api/v1/projects/:projectId/charter - Unduh Berkas PDF Project Charter Bergaya Profesional
-router.get('/projects/:projectId/charter', async (req, res) => {
-  try {
-    const { projectId } = req.params;
-
-    const project = await prisma.project.findUnique({
-      where: { projectId }
-    });
-
-    if (!project) {
-      return res.status(404).json({ code: 'PROJECT_NOT_FOUND', message: 'Proyek tidak ditemukan' });
+      return sendError(res, 404, 'PROJECT_NOT_FOUND', 'Proyek tidak ditemukan');
     }
 
     if (project.status !== 'REGISTERED') {
-      return res.status(400).json({
-        code: 'INVALID_STATUS',
-        message: 'Project Charter hanya dapat diterbitkan untuk proyek yang telah berstatus REGISTERED'
-      });
+      return sendError(
+        res,
+        400,
+        'INVALID_STATUS',
+        'Project Charter hanya dapat diterbitkan untuk proyek yang telah berstatus REGISTERED'
+      );
     }
 
     const esc = (str) => String(str ?? '—')
@@ -139,43 +231,36 @@ router.get('/projects/:projectId/charter', async (req, res) => {
       year: 'numeric'
     });
 
-    // Helper menggambar teks dan komponen grafis PDF
     const cmds = [];
 
-    // 1. KOTAK HEADER ATAS (Navy Gelap #0b1324)
-    cmds.push('0.043 0.075 0.141 rg'); // Warna isi Navy
+    // Header Navy Gelap
+    cmds.push('0.043 0.075 0.141 rg');
     cmds.push('40 735 515 65 re f');
-
-    // Teks di dalam Header Navy
-    cmds.push('1 1 1 rg'); // Teks Putih
+    cmds.push('1 1 1 rg');
     cmds.push(`BT /F1 8 Tf 55 782 Td (${esc('PT ANAHEIM NIMBUS UNIVERSAL  |  ENTERPRISE RESOURCE PLANNING')}) Tj ET`);
     cmds.push(`BT /F2 15 Tf 55 762 Td (${esc('LEMBAR PENGESAHAN PROJECT CHARTER')}) Tj ET`);
     cmds.push('0.7 0.8 0.9 rg');
     cmds.push(`BT /F1 8 Tf 55 747 Td (${esc('Dokumen Otorisasi & Serah Terima Proyek Kanonis (Modul D-1 Project Intake)')}) Tj ET`);
 
-    // Badge Kode Proyek di Kanan Header
-    cmds.push('0.06 0.46 0.43 rg'); // Hijau Emerald
+    // Badge Status
+    cmds.push('0.06 0.46 0.43 rg');
     cmds.push('440 752 100 32 re f');
     cmds.push('1 1 1 rg');
     cmds.push(`BT /F1 7 Tf 452 771 Td (${esc('STATUS: REGISTERED')}) Tj ET`);
     cmds.push(`BT /F2 12 Tf 452 757 Td (${esc('KODE ' + (project.canonicalCode || '-'))}) Tj ET`);
 
-    // 2. SEKSI 1: IDENTITAS UTAMA PROYEK
+    // Seksi 1: Identitas Proyek
     cmds.push('0.06 0.09 0.16 rg');
     cmds.push(`BT /F2 10 Tf 40 710 Td (${esc('1. IDENTITAS UTAMA PROYEK')}) Tj ET`);
-    cmds.push('0.8 0.85 0.9 RG 1 w 40 703 m 555 703 l S'); // Garis bawah judul seksi
+    cmds.push('0.8 0.85 0.9 RG 1 w 40 703 m 555 703 l S');
 
     const drawRow = (y, label, value, isBoldVal = false) => {
-      // Latar selang-seling tipis
       cmds.push('0.97 0.98 0.99 rg');
       cmds.push(`40 ${y - 6} 165 22 re f`);
-      // Garis pembatas baris
       cmds.push('0.90 0.92 0.95 RG 0.5 w');
       cmds.push(`40 ${y - 6} 515 22 re S`);
-      // Label kiri
       cmds.push('0.39 0.45 0.55 rg');
       cmds.push(`BT /F2 9 Tf 48 ${y + 2} Td (${esc(label)}) Tj ET`);
-      // Nilai kanan
       cmds.push('0.06 0.09 0.16 rg');
       cmds.push(`BT /${isBoldVal ? 'F2' : 'F1'} 9.5 Tf 215 ${y + 2} Td (${esc(value)}) Tj ET`);
     };
@@ -185,17 +270,17 @@ router.get('/projects/:projectId/charter', async (req, res) => {
     drawRow(631, 'ID Unik Proyek (UUID v7)', project.projectId, false);
     drawRow(609, 'Instansi Klien Pemesan', `${project.clientName || '—'} (${project.clientId || '—'})`, false);
 
-    // 3. SEKSI 2: PARAMETER KOMERSIAL & KEWENANGAN
+    // Seksi 2: Parameter Administratif
     cmds.push('0.06 0.09 0.16 rg');
     cmds.push(`BT /F2 10 Tf 40 578 Td (${esc('2. PARAMETER ADMINISTRATIF, KOMERSIAL & PENANGGUNG JAWAB')}) Tj ET`);
     cmds.push('0.8 0.85 0.9 RG 1 w 40 571 m 555 571 l S');
 
-    drawRow(543, 'Account Manager (AM)', `${project.amName || 'Andi Maulana'}`, false);
-    drawRow(521, 'Project Manager (PM)', `${project.pmName || 'Budi Santoso'}`, true);
+    drawRow(543, 'Account Manager (AM)', `${project.amName || 'Fikri Lazuardi Fadilla (AM)'}`, false);
+    drawRow(521, 'Project Manager (PM)', `${project.pmName || 'Sandy Walsh'}`, true);
     drawRow(499, 'Estimasi Periode Proyek', `${project.startDate || '—'}  s.d.  ${project.targetEndDate || '—'}`, false);
     drawRow(477, 'Nilai Indikatif Proyek', rupiah, true);
 
-    // 4. SEKSI 3: VERIFIKASI DOKUMEN ACUAN KERJA (WI-01 & PO)
+    // Seksi 3: Verifikasi Dokumen
     cmds.push('0.06 0.09 0.16 rg');
     cmds.push(`BT /F2 10 Tf 40 446 Td (${esc('3. STATUS KELENGKAPAN DOKUMEN SERAH TERIMA (WI-01 & PO)')}) Tj ET`);
     cmds.push('0.8 0.85 0.9 RG 1 w 40 439 m 555 439 l S');
@@ -203,18 +288,16 @@ router.get('/projects/:projectId/charter', async (req, res) => {
     drawRow(411, 'Dokumen Standar WI-01', project.documentsComplete ? 'LENGKAP (RKS, SPK, Kontrak, KAK, SOW Terverifikasi)' : 'BELUM LENGKAP', true);
     drawRow(389, 'Status Dokumen PO Fisik', project.poReceived ? 'PO FISIK TERVERIFIKASI (Penagihan E-2 Terbuka)' : 'BELUM ADA PO FISIK (Penagihan E-2 Diblokir Sementara)', true);
 
-    // 5. KOTAK PERNYATAAN OTORISASI
-    cmds.push('0.94 0.97 1.0 rg'); // Biru sangat muda
+    // Pernyataan Pengesahan
+    cmds.push('0.94 0.97 1.0 rg');
     cmds.push('0.75 0.85 0.98 RG 0.8 w');
     cmds.push('40 315 515 52 re B');
-
     cmds.push('0.1 0.25 0.45 rg');
     cmds.push(`BT /F2 9 Tf 52 350 Td (${esc('PERNYATAAN PENGESAHAN SERAH TERIMA (HANDOVER):')}) Tj ET`);
     cmds.push(`BT /F1 8.5 Tf 52 336 Td (${esc('Dengan diterbitkannya Project Charter ini, proyek dinyatakan resmi terdaftar (REGISTERED) di dalam')}) Tj ET`);
     cmds.push(`BT /F1 8.5 Tf 52 324 Td (${esc('sistem ERP PT Anaheim Nimbus Universal dan wewenang pelaksanaan diserahkan kepada Project Manager.')}) Tj ET`);
 
-    // 6. KOTAK TANDA TANGAN PARA PIHAK
-    // Kotak Kiri (AM)
+    // Kotak Tanda Tangan
     cmds.push('0.90 0.92 0.95 RG 0.7 w');
     cmds.push('40 175 245 115 re S');
     cmds.push('0.39 0.45 0.55 rg');
@@ -222,11 +305,10 @@ router.get('/projects/:projectId/charter', async (req, res) => {
     cmds.push('0.06 0.46 0.43 rg');
     cmds.push(`BT /F2 8 Tf 55 230 Td (${esc('[ TERTANDA SECARA DIGITAL - SISTEM ERP ]')}) Tj ET`);
     cmds.push('0.06 0.09 0.16 rg');
-    cmds.push(`BT /F2 10 Tf 55 198 Td (${esc(project.amName || 'Andi Maulana')}) Tj ET`);
+    cmds.push(`BT /F2 10 Tf 55 198 Td (${esc(project.amName || 'Fikri Lazuardi Fadilla (AM)')}) Tj ET`);
     cmds.push('0.39 0.45 0.55 rg');
     cmds.push(`BT /F1 8 Tf 55 185 Td (${esc('Account Manager (AM)')}) Tj ET`);
 
-    // Kotak Kanan (PM)
     cmds.push('0.90 0.92 0.95 RG 0.7 w');
     cmds.push('310 175 245 115 re S');
     cmds.push('0.39 0.45 0.55 rg');
@@ -234,18 +316,17 @@ router.get('/projects/:projectId/charter', async (req, res) => {
     cmds.push('0.06 0.46 0.43 rg');
     cmds.push(`BT /F2 8 Tf 325 230 Td (${esc('[ DISETUJUI & DIREKONSILIASI - PM ]')}) Tj ET`);
     cmds.push('0.06 0.09 0.16 rg');
-    cmds.push(`BT /F2 10 Tf 325 198 Td (${esc(project.pmName || 'Budi Santoso')}) Tj ET`);
+    cmds.push(`BT /F2 10 Tf 325 198 Td (${esc(project.pmName || 'Sandy Walsh')}) Tj ET`);
     cmds.push('0.39 0.45 0.55 rg');
     cmds.push(`BT /F1 8 Tf 325 185 Td (${esc('Project Manager (PM)')}) Tj ET`);
 
-    // 7. FOOTER DOKUMEN
+    // Footer Dokumen
     cmds.push('0.85 0.88 0.92 RG 0.5 w 40 70 m 555 70 l S');
     cmds.push('0.55 0.60 0.68 rg');
     cmds.push(`BT /F1 8 Tf 40 55 Td (${esc('Dicetak otomatis oleh Modul D-1 (Project Intake) - PT Anaheim Nimbus Universal pada ' + tglCetak)}) Tj ET`);
     cmds.push(`BT /F2 8 Tf 485 55 Td (${esc('Halaman 1 / 1')}) Tj ET`);
 
     const streamContent = cmds.join('\n');
-
     const objects = [
       '1 0 obj\n<< /Type /Catalog /Pages 2 0 R >>\nendobj\n',
       '2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n',
@@ -270,23 +351,26 @@ router.get('/projects/:projectId/charter', async (req, res) => {
     const pdfBuffer = Buffer.from(pdf, 'utf8');
 
     const fileName = `Project_Charter_${project.canonicalCode || project.projectId}.pdf`;
-
     res.setHeader('Content-Type', 'application/pdf');
     res.setHeader('Content-Disposition', `attachment; filename="${fileName}"`);
     res.setHeader('Content-Length', pdfBuffer.length);
     return res.status(200).send(pdfBuffer);
   } catch (err) {
-    res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: err.message });
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
 
-// 3. POST /api/v1/projects - Pendaftaran Draf Proyek Baru (UI-K01-02)
+// ============================================================================
+// 4. POST /api/v1/projects - Pendaftaran Draf Proyek Baru (UI-K01-02)
+// ============================================================================
 router.post('/projects', async (req, res) => {
   try {
     const {
       projectName,
       clientId,
       clientName,
+      amEmployeeId,
+      amName,
       pmEmployeeId,
       pmName,
       startDate,
@@ -295,13 +379,13 @@ router.post('/projects', async (req, res) => {
     } = req.body;
 
     if (!projectName || projectName.trim().length < 5) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Nama proyek wajib diisi minimal 5 karakter' });
+      return sendError(res, 400, 'VALIDATION_ERROR', 'Nama proyek wajib diisi minimal 5 karakter');
     }
     if (!startDate || !targetEndDate) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Tanggal estimasi mulai dan selesai wajib ditentukan' });
+      return sendError(res, 400, 'VALIDATION_ERROR', 'Tanggal estimasi mulai dan selesai wajib ditentukan');
     }
     if (new Date(targetEndDate) < new Date(startDate)) {
-      return res.status(400).json({ code: 'VALIDATION_ERROR', message: 'Target tanggal selesai tidak boleh mendahului tanggal mulai' });
+      return sendError(res, 400, 'VALIDATION_ERROR', 'Target tanggal selesai tidak boleh mendahului tanggal mulai');
     }
 
     const projectId = generateUuidV7();
@@ -310,14 +394,14 @@ router.post('/projects', async (req, res) => {
     const newProject = await prisma.project.create({
       data: {
         projectId,
-        canonicalCode: null, // Kode kanonis resmi diterbitkan saat REGISTERED
+        canonicalCode: null, // Kode resmi diterbitkan saat disetujui (REGISTERED)
         projectName: projectName.trim(),
         clientId: clientId || 'CL-TEMP',
         clientName: clientName || clientId,
-        amEmployeeId: 'SDM-0012',
-        amName: 'Andi Maulana',
-        pmEmployeeId: pmEmployeeId || 'SDM-0004',
-        pmName: pmName || 'Budi Santoso',
+        amEmployeeId: amEmployeeId || '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+        amName: amName || 'Fikri Lazuardi Fadilla (AM)',
+        pmEmployeeId: pmEmployeeId || '01929b4a-5f10-7a22-9d44-3c8f1b2e7a90',
+        pmName: pmName || 'Sandy Walsh',
         startDate,
         targetEndDate,
         indicativeValue: Number(indicativeValue) || 0,
@@ -327,7 +411,7 @@ router.post('/projects', async (req, res) => {
         auditLogs: {
           create: {
             auditLogId: logId,
-            actorUserId: 'SDM-0012',
+            actorUserId: amEmployeeId || '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
             action: 'CREATE_DRAFT',
             details: 'Draf proyek dibuat oleh Account Manager (AM)',
             timestamp: new Date()
@@ -342,11 +426,13 @@ router.post('/projects', async (req, res) => {
       data: newProject
     });
   } catch (err) {
-    res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: err.message });
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
 
-// 4. PUT /api/v1/projects/:projectId - Ubah Data Draf Proyek
+// ============================================================================
+// 5. PUT /api/v1/projects/:projectId - Ubah Data Draf Proyek
+// ============================================================================
 router.put('/projects/:projectId', async (req, res) => {
   try {
     const { projectId } = req.params;
@@ -380,14 +466,16 @@ router.put('/projects/:projectId', async (req, res) => {
   }
 });
 
-// 5. POST /api/v1/projects/:projectId/handover - AM Mengajukan Serah Terima ke PM
+// ============================================================================
+// 6. POST /api/v1/projects/:projectId/handover - AM Mengajukan ke PM
+// ============================================================================
 router.post('/projects/:projectId/handover', async (req, res) => {
   try {
     const { projectId } = req.params;
-
     const project = await prisma.project.findUnique({ where: { projectId } });
+
     if (!project) {
-      return res.status(404).json({ code: 'PROJECT_NOT_FOUND', message: 'Proyek tidak ditemukan' });
+      return sendError(res, 404, 'PROJECT_NOT_FOUND', 'Proyek tidak ditemukan');
     }
 
     const updated = await prisma.project.update({
@@ -397,7 +485,7 @@ router.post('/projects/:projectId/handover', async (req, res) => {
         auditLogs: {
           create: {
             auditLogId: `LOG-${Date.now()}`,
-            actorUserId: 'SDM-0012',
+            actorUserId: project.amEmployeeId || '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
             action: 'HANDOVER',
             details: 'AM mengajukan berkas handover untuk peninjauan PM',
             timestamp: new Date()
@@ -409,29 +497,25 @@ router.post('/projects/:projectId/handover', async (req, res) => {
 
     res.json({ message: 'Proyek berhasil diserahkan ke PM', data: updated });
   } catch (err) {
-    res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: err.message });
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
 
-// 6. POST /api/v1/projects/:projectId/approve - PM Menyetujui & Registrasi Resmi Proyek
-// POST /projects/:projectId/approve - Persetujuan Penerimaan Handover oleh PM
+// ============================================================================
+// 7. POST /api/v1/projects/:projectId/approve - PM Menyetujui & Registrasi Resmi
+// ============================================================================
 router.post('/projects/:projectId/approve', async (req, res) => {
   try {
     const { projectId } = req.params;
-
     const project = await prisma.project.findUnique({ where: { projectId } });
+
     if (!project) {
-      return res.status(404).json({ code: 'PROJECT_NOT_FOUND', message: 'Proyek tidak ditemukan' });
+      return sendError(res, 404, 'PROJECT_NOT_FOUND', 'Proyek tidak ditemukan');
     }
 
-    // Ambil nomor urut tertinggi dari kode yang sudah ada untuk menghindari benturan nomor
     const yearPrefix = '2026';
     const allProjectsWithCode = await prisma.project.findMany({
-      where: {
-        canonicalCode: {
-          startsWith: yearPrefix
-        }
-      },
+      where: { canonicalCode: { startsWith: yearPrefix } },
       select: { canonicalCode: true }
     });
 
@@ -445,7 +529,6 @@ router.post('/projects/:projectId/approve', async (req, res) => {
       }
     }
 
-    // Jika proyek sudah memiliki kode (misal saat revisi), gunakan kode tersebut; jika belum, terbitkan nomor urut baru
     const canonicalCode = project.canonicalCode || `${yearPrefix}${String(maxSeq + 1).padStart(2, '0')}`;
 
     const updated = await prisma.project.update({
@@ -456,7 +539,7 @@ router.post('/projects/:projectId/approve', async (req, res) => {
         auditLogs: {
           create: {
             auditLogId: `LOG-${Date.now()}`,
-            actorUserId: project.pmEmployeeId || 'SDM-0004',
+            actorUserId: project.pmEmployeeId || '01929b4a-5f10-7a22-9d44-3c8f1b2e7a90',
             action: 'APPROVE',
             details: `PM menyetujui handover. Kode resmi ${canonicalCode} diterbitkan.`,
             timestamp: new Date()
@@ -468,39 +551,40 @@ router.post('/projects/:projectId/approve', async (req, res) => {
 
     res.json({ message: 'Proyek berhasil disetujui & berstatus REGISTERED', data: updated });
   } catch (err) {
-    res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: err.message });
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
 
-// 7. POST /api/v1/projects/:projectId/reject - PM Menolak Handover (Wajib Min. 20 Karakter)
-// POST /projects/:projectId/reject - Penolakan Handover oleh PM
+// ============================================================================
+// 8. POST /api/v1/projects/:projectId/reject - PM Menolak Handover (Min. 20 Karakter)
+// ============================================================================
 router.post('/projects/:projectId/reject', async (req, res) => {
   try {
     const { projectId } = req.params;
-    // Baca 'notes' atau fallback ke 'reason'
     const rejectionReason = (req.body.notes || req.body.reason || '').trim();
 
     if (!rejectionReason || rejectionReason.length < 20) {
-      return res.status(400).json({
-        code: 'VALIDATION_ERROR',
-        message: 'Catatan penolakan PM wajib diisi minimal 20 karakter'
-      });
+      return sendError(
+        res,
+        400,
+        'VALIDATION_ERROR',
+        'Catatan penolakan PM wajib diisi minimal 20 karakter'
+      );
     }
 
     const project = await prisma.project.findUnique({ where: { projectId } });
     if (!project) {
-      return res.status(404).json({ code: 'PROJECT_NOT_FOUND', message: 'Proyek tidak ditemukan' });
+      return sendError(res, 404, 'PROJECT_NOT_FOUND', 'Proyek tidak ditemukan');
     }
 
     const updated = await prisma.project.update({
       where: { projectId },
       data: {
         status: 'REVISI_HANDOVER',
-        // Update audit log sesuai skema Prisma
         auditLogs: {
           create: {
             auditLogId: `LOG-${Date.now()}`,
-            actorUserId: project.pmEmployeeId || 'SDM-0004',
+            actorUserId: project.pmEmployeeId || '01929b4a-5f10-7a22-9d44-3c8f1b2e7a90',
             action: 'REJECT',
             details: rejectionReason,
             timestamp: new Date()
@@ -510,16 +594,15 @@ router.post('/projects/:projectId/reject', async (req, res) => {
       include: { auditLogs: { orderBy: { timestamp: 'desc' } } }
     });
 
-    res.json({
-      message: 'Handover dikembalikan ke AM untuk revisi',
-      data: updated
-    });
+    res.json({ message: 'Handover dikembalikan ke AM untuk revisi', data: updated });
   } catch (err) {
-    res.status(500).json({ code: 'INTERNAL_SERVER_ERROR', message: err.message });
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
 
-// 8. PATCH /api/v1/projects/:projectId/documents-status - Perbarui Status WI-01 & PO
+// ============================================================================
+// 9. PATCH /api/v1/projects/:projectId/documents-status - Status WI-01 & PO
+// ============================================================================
 router.patch('/projects/:projectId/documents-status', async (req, res) => {
   try {
     const { projectId } = req.params;
