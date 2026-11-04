@@ -5,8 +5,8 @@ info:
     Spesifikasi Kontrak REST API Resmi untuk Modul Registrasi Proyek dan Project Intake (D-1), 
     Enterprise Resource Planning (ERP) PT Anaheim Nimbus Universal. Modul ini bertindak sebagai 
     Single Source of Truth (SSOT) data proyek kanonis bagi modul hilir (E-2, E-3, E-5, D-3).
-    Kontrak ini dibekukan (Freeze) untuk Asesmen Tengah Semester (UTS).
-  version: 0.2.0
+    Revisi v0.3.0 menyelaraskan temuan integrasi INT-01 s.d. INT-06 serta kebutuhan modul tata kelola E-5.
+  version: 0.3.0
   contact:
     name: "Tim Pengembang Kelompok 1-D (Lead API: Fikri Lazuardi Fadilla)"
     email: fikri@anaheim.local
@@ -100,8 +100,8 @@ paths:
     get:
       summary: Mengambil rincian data tunggal proyek kanonis terpusat
       description: >-
-        Mengembalikan metadata kanonis terverifikasi untuk satu proyek berdasarkan UUID v7 atau 
-        kode kanonis (YYYYXX). Dikonsumsi oleh modul perencanaan teknis (E-3), penagihan invoice & termin (E-2), 
+        Mengembalikan metadata kanonis terverifikasi untuk satu proyek berdasarkan UUID v7. 
+        Dikonsumsi oleh modul perencanaan teknis (E-3), penagihan invoice & termin (E-2), 
         pengawasan risiko (E-5), evaluasi penutupan (D-3), dan finansial (E-1).
       operationId: getProjectById
       tags:
@@ -110,35 +110,51 @@ paths:
         - name: projectId
           in: path
           required: true
-          description: Identifier unik proyek berupa string UUID v7 atau Kode Kanonis (YYYYXX).
+          description: Identifier unik proyek berupa string UUID v7 resmi RFC 9562.
           schema:
             type: string
+            format: uuid
           example: 01924b1e-7f32-7a81-9b12-45e8a1234567
       responses:
         '200':
-          description: Data proyek kanonis ditemukan dan disajikan secara lengkap.
+          description: Data proyek kanonis ditemukan dan disajikan tanpa overfetching data finansial.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ProjectCanonicalResponse'
         '400':
-          description: Format identifier projectId pada path tidak valid.
+          description: Format identifier projectId pada path tidak valid (bukan format UUID).
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: INVALID_PROJECT_ID_FORMAT
+                message: Format projectId 'abc' tidak valid. Parameter harus berupa UUID v7
+                details:
+                  requestedProjectId: abc
         '401':
-          description: Akses ditolak. Token JWT F-1 tidak disertakan atau tidak valid.
+          description: Akses ditolak. Header Authorization Bearer token tidak disertakan atau kosong.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: UNAUTHORIZED
+                message: "Akses ditolak: Header Authorization Bearer token wajib disertakan"
+                details:
+                  header: Authorization
         '404':
-          description: Proyek dengan ID atau kode tersebut tidak terdaftar di sistem intake.
+          description: Proyek dengan ID tersebut tidak terdaftar di sistem intake.
           content:
             application/json:
               schema:
                 $ref: '#/components/schemas/ErrorResponse'
+              example:
+                code: PROJECT_NOT_FOUND
+                message: Data proyek dengan ID 01924b1e-7f32-7a81-9b12-45e8a1234567 tidak ditemukan di sistem intake
+                details:
+                  requestedProjectId: 01924b1e-7f32-7a81-9b12-45e8a1234567
 
   # ============================================================================
   # API-K01-09: UNDUH DOKUMEN BINER PDF PROJECT CHARTER (FTR-K01-08)
@@ -198,12 +214,15 @@ components:
         - clientId
         - clientName
         - amEmployeeId
+        - amName
         - pmEmployeeId
+        - pmName
         - startDate
         - targetEndDate
         - documentsComplete
         - poReceived
         - status
+        - active
         - createdAt
         - updatedAt
       properties:
@@ -221,33 +240,43 @@ components:
         projectName:
           type: string
           description: Nama paket inisiasi proyek resmi.
-          example: Implementasi Sistem ERP Cloud Anaheim Tahap 1
+          example: Modernisasi Gedung Operasional
         clientId:
           type: string
           description: Kode referensi instansi klien dari modul CRM F-6 (atau ID draf sementara).
-          example: PTANTRI
+          example: CL-001
         clientName:
           type: string
           description: Nama lengkap perusahaan atau instansi klien pemesan.
-          example: PT Anaheim Nimbus Universal
+          example: PT Cakra Infrastruktur
         amEmployeeId:
           type: string
-          description: Referensi ID penanggung jawab Account Manager (dari modul F-1 / F-2).
-          example: SDM-0012
+          format: uuid
+          description: Referensi ID penanggung jawab Account Manager (format UUID v7 modul F-1 / F-2).
+          example: 01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1
+        amName:
+          type: string
+          description: Nama lengkap Account Manager penanggung jawab inisiasi komersial.
+          example: Fikri Lazuardi Fadilla (AM)
         pmEmployeeId:
           type: string
-          description: Referensi ID pegawai Project Manager yang ditunjuk (dari modul SDM F-2).
-          example: SDM-0004
+          format: uuid
+          description: Referensi ID pegawai Project Manager yang ditunjuk (format UUID v7 modul SDM F-2).
+          example: 01929b4a-5f10-7a22-9d44-3c8f1b2e7a90
+        pmName:
+          type: string
+          description: Nama lengkap Project Manager penerima serah terima pelaksana.
+          example: Sandy Walsh
         startDate:
           type: string
           format: date
           description: Estimasi tanggal mulai administratif (ISO 8601 YYYY-MM-DD).
-          example: "2026-10-15"
+          example: "2026-03-01"
         targetEndDate:
           type: string
           format: date
           description: Estimasi target tanggal selesai administratif (ISO 8601 YYYY-MM-DD).
-          example: "2027-04-15"
+          example: "2026-08-31"
         documentsComplete:
           type: boolean
           description: Nilai sakelar (toggle switch) kelengkapan dokumen acuan kerja WI-01.
@@ -257,7 +286,7 @@ components:
           description: >-
             Flag ketersediaan dokumen fisik Purchase Order (PO). Jika bernilai false, 
             modul komersial E-2 mengunci penerbitan termin tagihan secara otomatis.
-          example: false
+          example: true
         status:
           type: string
           enum:
@@ -267,16 +296,20 @@ components:
             - REGISTERED
           description: Siklus hidup status proyek.
           example: REGISTERED
+        active:
+          type: boolean
+          description: Flag penanda proyek aktif (true jika status REGISTERED) untuk validasi modul governance E-5.
+          example: true
         createdAt:
           type: string
           format: date-time
           description: Waktu inisiasi draf proyek dalam format ISO 8601 dengan zona WIB (+07:00).
-          example: "2026-10-13T09:00:00+07:00"
+          example: "2026-02-15T08:30:00+07:00"
         updatedAt:
           type: string
           format: date-time
           description: Waktu terakhir data diperbarui dengan zona WIB (+07:00).
-          example: "2026-10-13T11:30:00+07:00"
+          example: "2026-02-18T10:00:00+07:00"
 
     PaginationMeta:
       type: object
