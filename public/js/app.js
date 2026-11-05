@@ -119,18 +119,57 @@ class AppRouter {
     }
 
     if (nameEl) nameEl.textContent = currentUser.namaLengkap || 'Fikri Lazuardi Fadilla';
-    if (roleEl) roleEl.textContent = currentUser.peran === 'AM' ? 'Account Manager' : (currentUser.peran || 'Pengguna');
+    if (roleEl) {
+      roleEl.textContent = currentUser.peran === 'AM'
+        ? 'Account Manager'
+        : currentUser.peran === 'PM' ? 'Project Manager' : (currentUser.peran || 'Pengguna');
+    }
     if (avatarEl && currentUser.namaLengkap) {
       const initials = currentUser.namaLengkap.split(' ').map(n => n[0]).slice(0, 2).join('');
       avatarEl.textContent = initials.toUpperCase();
     }
+    const accountSwitcher = document.getElementById('accountSwitcher');
+    if (accountSwitcher) accountSwitcher.value = currentUser.peran === 'PM' ? 'PM' : 'AM';
+  }
+
+  switchAccount(role) {
+    const accounts = {
+      AM: {
+        akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+        namaLengkap: 'Fikri Lazuardi Fadilla',
+        email: 'account.manager@anaheimnimbus.co.id',
+        peran: 'AM',
+        roleCode: 'AM'
+      },
+      PM: {
+        akunId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01',
+        namaLengkap: 'Haekal Khadafy',
+        email: 'haekal.khadafy@anaheimnimbus.co.id',
+        peran: 'PM',
+        roleCode: 'PM'
+      }
+    };
+    const selectedAccount = accounts[role];
+    if (!selectedAccount) return;
+
+    this.currentUser = selectedAccount;
+    localStorage.setItem('user', JSON.stringify(selectedAccount));
+    if (!localStorage.getItem('token')) {
+      localStorage.setItem('token', 'mock-jwt-token-f1-account-manager-2026');
+    }
+    this.updateSidebarProfile(selectedAccount);
+    this.navigateToDashboard();
+    this.showToast(`Beralih ke akun ${role === 'AM' ? 'Account Manager' : 'Project Manager'}`);
   }
 
   // Sinkronisasi Sesi Autentikasi dengan API F-1
   async syncProfileWithF1() {
+    if (this.currentUser.peran === 'PM') return;
+
     try {
       const authData = await loginF1('account.manager', 'Password123!');
       if (authData?.user) {
+        if (this.currentUser.peran === 'PM') return;
         localStorage.setItem('token', authData.accessToken || authData.token);
         localStorage.setItem('user', JSON.stringify(authData.user));
         this.currentUser = authData.user;
@@ -149,9 +188,11 @@ class AppRouter {
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Dasbor proyek';
     this.appContent.innerHTML = this.templates.dashboard;
 
-    document.getElementById('btnNavCreate')?.addEventListener('click', () => {
-      this.navigateToCreate();
-    });
+    const btnNavCreate = document.getElementById('btnNavCreate');
+    if (btnNavCreate) {
+      btnNavCreate.classList.toggle('hidden', this.currentUser.peran !== 'AM');
+      btnNavCreate.addEventListener('click', () => this.navigateToCreate());
+    }
 
     // Listener Tombol Ekspor Tabel Proyek ke CSV
     document.getElementById('btnExportProjects')?.addEventListener('click', async () => {
@@ -240,6 +281,10 @@ class AppRouter {
 
   // Tampilan Form Registrasi Draf Baru (UI-K01-02)
   async navigateToCreate() {
+    if (this.currentUser.peran !== 'AM') {
+      this.showToast('Hanya akun AM yang dapat membuat proyek', true);
+      return;
+    }
     this.currentView = 'create';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Draf proyek baru';
     this.appContent.innerHTML = this.templates.form;
@@ -251,6 +296,10 @@ class AppRouter {
 
   // Tampilan Form Ubah Draf (UI-K01-02 Edit Mode)
   async navigateToEdit(projectId) {
+    if (this.currentUser.peran !== 'AM') {
+      this.showToast('Hanya akun AM yang dapat mengubah proyek', true);
+      return;
+    }
     this.currentView = 'edit';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Ubah draf proyek';
     this.appContent.innerHTML = this.templates.form;
@@ -339,6 +388,10 @@ class AppRouter {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       location.reload();
+    });
+
+    document.getElementById('accountSwitcher')?.addEventListener('change', (event) => {
+      this.switchAccount(event.target.value);
     });
 
     // Render dasbor terlebih dahulu agar tidak ada jeda tampilan

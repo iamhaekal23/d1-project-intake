@@ -56,6 +56,10 @@ export async function fetchProjectById(projectId) {
 export async function fetchProjectIntakeDetail(projectId) {
   return request(`/projects/${encodeURIComponent(projectId)}/intake-detail`);
 }
+
+export async function fetchProjectIntakeDetail(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}/intake-detail`);
+}
 export async function createProject(payload) {
   return request('/projects', {
     method: 'POST',
