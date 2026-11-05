@@ -1,6 +1,6 @@
 // public/js/views/detail.js - Logika Khusus Layar Detail Proyek & Verifikasi PM (UI-K01-03)
 import {
-  fetchProjectById,
+  fetchProjectIntakeDetail,
   updateDocumentStatus,
   approveProject,
   rejectProject
@@ -60,7 +60,7 @@ export const DetailView = {
 
   async loadAndRender(projectId, onToast) {
     try {
-      const res = await fetchProjectById(projectId);
+      const res = await fetchProjectIntakeDetail(projectId);
       const proj = res.data || res;
       this.activeProject = proj;
       this.renderHeader(proj);
@@ -84,8 +84,9 @@ export const DetailView = {
 
     // Kontrol Tombol Ubah Proyek (Hanya muncul jika DRAFT atau REVISI_HANDOVER)
     const btnEdit = document.getElementById('btnEditProject');
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
     if (btnEdit) {
-      if (proj.status === 'DRAFT' || proj.status === 'REVISI_HANDOVER') {
+      if ((proj.status === 'DRAFT' || proj.status === 'REVISI_HANDOVER') && currentUser.peran === 'AM') {
         btnEdit.classList.remove('hidden');
       } else {
         btnEdit.classList.add('hidden');
@@ -334,6 +335,9 @@ export const DetailView = {
   },
 
   renderPmPanel(proj) {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
+    const isAm = currentUser.peran === 'AM';
+    const isPm = currentUser.peran === 'PM';
     const btnApprove = document.getElementById('btnApprovePM');
     const btnReject = document.getElementById('btnRejectPM');
     const notesInput = document.getElementById('pmNotes');
@@ -364,7 +368,7 @@ export const DetailView = {
       if (charLabel) charLabel.classList.add('hidden');
 
       if (btnHandover) {
-        btnHandover.classList.remove('hidden');
+        btnHandover.classList.toggle('hidden', !isAm);
         btnHandover.innerHTML = proj.status === 'REVISI_HANDOVER'
           ? '<span>Ajukan Handover Ulang ke PM</span><span>→</span>'
           : '<span>Ajukan Serah Terima ke PM</span><span>→</span>';
@@ -373,8 +377,8 @@ export const DetailView = {
     // 2. KONDISI: Proyek UNDER_REVIEW (Wewenang PM Aktif)
     else if (proj.status === 'UNDER_REVIEW') {
       btnHandover?.classList.add('hidden');
-      btnApprove?.classList.remove('hidden');
-      btnReject?.classList.remove('hidden');
+      btnApprove?.classList.toggle('hidden', !isPm);
+      btnReject?.classList.toggle('hidden', !isPm);
 
       if (btnApprove) {
         btnApprove.disabled = false;
@@ -386,15 +390,17 @@ export const DetailView = {
         btnReject.classList.remove('opacity-50', 'cursor-not-allowed');
       }
       if (notesInput) {
-        notesInput.disabled = false;
+        notesInput.disabled = !isPm;
         notesInput.placeholder = 'Mohon unggah PO fisik dan konfirmasi jadwal pelaksanaan dengan klien.';
       }
-      if (charLabel) charLabel.classList.remove('hidden');
+      if (charLabel) charLabel.classList.toggle('hidden', !isPm);
+      btnApprove?.classList.toggle('hidden', !isPm);
+      btnReject?.classList.toggle('hidden', !isPm);
     } 
     // 3. KONDISI: Proyek REGISTERED (Terkunci Selesai)
     else if (proj.status === 'REGISTERED') {
       btnHandover?.classList.add('hidden');
-      btnApprove?.classList.remove('hidden');
+      btnApprove?.classList.toggle('hidden', !isPm);
       btnReject?.classList.add('hidden');
 
       if (btnApprove) {
@@ -402,6 +408,7 @@ export const DetailView = {
         btnApprove.className = 'w-full py-2.5 rounded-xl bg-slate-200 text-slate-500 text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-2';
         btnApprove.innerHTML = '<span>✓</span><span>Proyek Resmi Terdaftar (REGISTERED)</span>';
       }
+      btnApprove?.classList.toggle('hidden', !isPm);
       if (notesInput) {
         notesInput.disabled = true;
         notesInput.value = '';
