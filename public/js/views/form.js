@@ -309,6 +309,10 @@ export const FormView = {
     const clientSelect = document.getElementById('clientSelect');
     const pmSelect = document.getElementById('pmSelect');
     const rawVal = document.getElementById('indicativeValue')?.value || '0';
+    const displayVal = document.getElementById('indicativeValueDisplay')?.value || '';
+    const indicativeValue = Number(rawVal.replace(/[^0-9]/g, '')) ||
+      Number(displayVal.replace(/[^0-9]/g, '')) ||
+      0;
 
     const currentUser = JSON.parse(localStorage.getItem('user')) || {
       namaLengkap: 'Fikri Lazuardi Fadilla'
@@ -324,7 +328,7 @@ export const FormView = {
       amName: amNameVal,
       startDate: document.getElementById('startDate').value,
       targetEndDate: document.getElementById('targetEndDate').value,
-      indicativeValue: Number(rawVal)
+      indicativeValue
     };
 
     try {

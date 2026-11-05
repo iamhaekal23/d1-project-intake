@@ -143,7 +143,40 @@ router.get('/projects', async (req, res) => {
     sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
 });
+// Detail untuk UI intake; nilai indikatif tidak termasuk respons API kanonis publik.
+router.get('/projects/:projectId/intake-detail', authenticateToken, async (req, res) => {
+  try {
+    const { projectId } = req.params;
 
+    if (!UUID_REGEX.test(projectId)) {
+      return sendError(
+        res,
+        400,
+        'INVALID_PROJECT_ID_FORMAT',
+        `Format projectId '${projectId}' tidak valid. Parameter harus berupa UUID v7`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    const project = await prisma.project.findUnique({ where: { projectId } });
+    if (!project) {
+      return sendError(
+        res,
+        404,
+        'PROJECT_NOT_FOUND',
+        `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    res.json({
+      ...toCanonicalProjectResponse(project),
+      indicativeValue: Number(project.indicativeValue ?? 0)
+    });
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
+  }
+});
 // ============================================================================
 // 2. GET /api/v1/projects/:projectId - Detail Proyek Kanonis (API-K01-07)
 // ============================================================================

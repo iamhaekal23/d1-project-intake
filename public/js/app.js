@@ -2,7 +2,7 @@
 import { DashboardView } from './views/dashboard.js';
 import { FormView } from './views/form.js';
 import { DetailView } from './views/detail.js';
-import { fetchProjectById, loginF1 } from './api.js';
+import { fetchProjectIntakeDetail, loginF1 } from './api.js';
 
 class AppRouter {
   constructor() {
@@ -257,7 +257,7 @@ class AppRouter {
 
     await FormView.loadMasterData();
     try {
-      const res = await fetchProjectById(projectId);
+      const res = await fetchProjectIntakeDetail(projectId);
       const proj = res.data || res;
       FormView.populateForEdit(proj);
       this.attachFormEvents();

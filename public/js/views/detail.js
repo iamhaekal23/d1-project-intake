@@ -1,6 +1,6 @@
 // public/js/views/detail.js - Logika Khusus Layar Detail Proyek & Verifikasi PM (UI-K01-03)
 import {
-  fetchProjectById,
+  fetchProjectIntakeDetail,
   updateDocumentStatus,
   approveProject,
   rejectProject
@@ -60,7 +60,7 @@ export const DetailView = {
 
   async loadAndRender(projectId, onToast) {
     try {
-      const res = await fetchProjectById(projectId);
+      const res = await fetchProjectIntakeDetail(projectId);
       const proj = res.data || res;
       this.activeProject = proj;
       this.renderHeader(proj);
