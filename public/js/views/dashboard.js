@@ -51,14 +51,15 @@ export const DashboardView = {
     select.innerHTML = optionsHtml;
   },
 
-  async render(onOpenDetail, onOpenEdit) {
+  async render(onOpenDetail, onOpenEdit, currentUser) {
     try {
       const q = document.getElementById('searchInput')?.value.trim() || '';
       const status = document.getElementById('statusFilter')?.value || 'ALL';
       const amPm = document.getElementById('amPmFilter')?.value || 'ALL';
+      const pmEmployeeId = currentUser?.peran === 'PM' ? currentUser.employeeId : undefined;
 
       // 1. Ambil data agregat kartu metrik
-      const allRes = await fetchProjects({ page: 1, limit: 100 });
+      const allRes = await fetchProjects({ page: 1, limit: 100, pmEmployeeId });
       const allProjects = Array.isArray(allRes) ? allRes : (allRes.data || []);
       this.updateMetricCards(allProjects);
       this.populateAmPmDropdown(allProjects);
@@ -68,7 +69,8 @@ export const DashboardView = {
         page: this.currentPage,
         limit: this.limit,
         status: status === 'ALL' ? '' : status,
-        q
+        q,
+        pmEmployeeId
       });
 
       let rows = Array.isArray(res) ? res : (res.data || []);
@@ -80,7 +82,7 @@ export const DashboardView = {
       this.totalPages = res.meta ? res.meta.totalPages : Math.ceil(this.totalItems / this.limit);
 
       this.renderTableRows(rows, onOpenDetail, onOpenEdit);
-      this.renderPagination(onOpenDetail, onOpenEdit);
+      this.renderPagination(onOpenDetail, onOpenEdit, currentUser);
     } catch (err) {
       console.error('Gagal merender dasbor:', err);
     }
@@ -142,7 +144,7 @@ export const DashboardView = {
     });
   },
 
-  renderPagination(onOpenDetail, onOpenEdit) {
+  renderPagination(onOpenDetail, onOpenEdit, currentUser) {
     const infoEl = document.getElementById('paginationInfo');
     const btnContainer = document.getElementById('paginationButtons');
     if (!infoEl || !btnContainer) return;
@@ -168,7 +170,7 @@ export const DashboardView = {
         const target = Number(btn.getAttribute('data-page'));
         if (target >= 1 && target <= this.totalPages && target !== this.currentPage) {
           this.currentPage = target;
-          this.render(onOpenDetail, onOpenEdit);
+          this.render(onOpenDetail, onOpenEdit, currentUser);
         }
       });
     });

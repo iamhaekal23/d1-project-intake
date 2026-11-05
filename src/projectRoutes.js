@@ -105,10 +105,14 @@ router.get('/projects', async (req, res) => {
     const limit = Math.max(1, parseInt(req.query.limit) || 3);
     const status = req.query.status;
     const q = req.query.q ? req.query.q.trim().toLowerCase() : '';
+    const pmEmployeeId = req.query.pmEmployeeId;
 
     const where = {};
     if (status && status !== 'ALL') {
       where.status = status;
+    }
+    if (pmEmployeeId) {
+      where.pmEmployeeId = pmEmployeeId;
     }
     if (q) {
       where.OR = [
@@ -180,6 +184,46 @@ router.get('/projects/:projectId', authenticateToken, async (req, res) => {
 
     // 4. Kembalikan Respons Bersih Melalui Serializer Kanonis
     res.json(toCanonicalProjectResponse(project));
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
+  }
+});
+
+// Detail untuk UI intake; nilai indikatif tidak termasuk respons API kanonis publik.
+router.get('/projects/:projectId/intake-detail', authenticateToken, async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    if (!UUID_REGEX.test(projectId)) {
+      return sendError(
+        res,
+        400,
+        'INVALID_PROJECT_ID_FORMAT',
+        `Format projectId '${projectId}' tidak valid. Parameter harus berupa UUID v7`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    const project = await prisma.project.findUnique({
+      where: { projectId },
+      include: { auditLogs: { orderBy: { timestamp: 'desc' } } }
+    });
+    if (!project) {
+      return sendError(
+        res,
+        404,
+        'PROJECT_NOT_FOUND',
+        `Data proyek dengan ID ${projectId} tidak ditemukan di sistem intake`,
+        { requestedProjectId: projectId }
+      );
+    }
+
+    res.json({
+      ...toCanonicalProjectResponse(project),
+      indicativeValue: Number(project.indicativeValue ?? 0),
+      rejectionNotes: project.rejectionNotes,
+      auditLogs: project.auditLogs
+    });
   } catch (err) {
     sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
   }
@@ -472,6 +516,11 @@ router.put('/projects/:projectId', async (req, res) => {
 router.post('/projects/:projectId/handover', async (req, res) => {
   try {
     const { projectId } = req.params;
+    const amNotes = typeof req.body.notes === 'string' ? req.body.notes.trim() : '';
+    if (amNotes.length > 1000) {
+      return sendError(res, 400, 'VALIDATION_ERROR', 'Catatan balasan maksimal 1000 karakter');
+    }
+
     const project = await prisma.project.findUnique({ where: { projectId } });
 
     if (!project) {
@@ -487,7 +536,9 @@ router.post('/projects/:projectId/handover', async (req, res) => {
             auditLogId: `LOG-${Date.now()}`,
             actorUserId: project.amEmployeeId || '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
             action: 'HANDOVER',
-            details: 'AM mengajukan berkas handover untuk peninjauan PM',
+            details: amNotes
+              ? `AM mengajukan berkas handover untuk peninjauan PM. Catatan AM: ${amNotes}`
+              : 'AM mengajukan berkas handover untuk peninjauan PM',
             timestamp: new Date()
           }
         }
@@ -581,6 +632,7 @@ router.post('/projects/:projectId/reject', async (req, res) => {
       where: { projectId },
       data: {
         status: 'REVISI_HANDOVER',
+        rejectionNotes: rejectionReason,
         auditLogs: {
           create: {
             auditLogId: `LOG-${Date.now()}`,

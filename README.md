@@ -50,6 +50,8 @@ Pastikan **Node.js (v18+)** dan **npm** telah terpasang di perangkat Anda sebelu
    - **Base URL REST API:** `http://localhost:3000/api/v1`
    - **Prisma Studio (Eksplorasi Database):** `npm run db:studio`
 
+Pemilih **Ganti akun** di sidebar dapat digunakan untuk mencoba tampilan peran AM dan PM. Gunakan **Tambah akun PM** untuk memilih pegawai PM lain dari referensi SDM; akun yang ditambahkan disimpan di browser dan muncul pada pemilih akun. Daftar proyek dan ekspor saat memakai akun PM hanya memuat proyek yang ditugaskan kepada PM tersebut. Ini hanya simulasi peran untuk UI lokal, bukan autentikasi akun F-1.
+
 ---
 
 ## 2. Panduan Penggunaan dan Pengujian REST API
@@ -128,6 +130,8 @@ curl -X GET "http://localhost:3000/api/v1/projects?status=REGISTERED"
 ### B. Mengambil Detail Proyek Tertentu (`GET /api/v1/projects/{projectId}`)
 
 Digunakan oleh modul **E-2, E-3, E-5, D-3,** dan **F-2** untuk membaca detail resmi proyek berdasarkan Kode Kanonis 6 digit (misal: `202601`) maupun UUID v7 (`projectId`). Endpoint ini juga menyediakan atribut `poReceived` untuk memvalidasi ketersediaan PO fisik tanpa membocorkan nilai komersial internal (`indicativeValue`).
+
+Antarmuka internal D-1 menampilkan nilai indikatif, catatan revisi PM (`rejectionNotes`), dan riwayat catatan AM/PM (`auditLogs`) melalui `GET /api/v1/projects/{projectId}/intake-detail`, yang memerlukan header autentikasi. Saat AM mengajukan handover ulang, field `notes` opsional pada endpoint handover dicatat dalam riwayat agar dapat dibaca PM.
 
 **Contoh URL:**
 `http://localhost:3000/api/v1/projects/202601`

@@ -45,12 +45,17 @@ export async function fetchProjects(params = {}) {
   if (params.limit) query.set('limit', String(params.limit));
   if (params.status && params.status !== 'ALL') query.set('status', params.status);
   if (params.q) query.set('q', params.q);
+  if (params.pmEmployeeId) query.set('pmEmployeeId', params.pmEmployeeId);
   const qs = query.toString();
   return request(`/projects${qs ? `?${qs}` : ''}`);
 }
 
 export async function fetchProjectById(projectId) {
   return request(`/projects/${encodeURIComponent(projectId)}`);
+}
+
+export async function fetchProjectIntakeDetail(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}/intake-detail`);
 }
 
 export async function createProject(payload) {
@@ -74,9 +79,10 @@ export async function updateDocumentStatus(projectId, payload) {
   });
 }
 
-export async function handoverProject(projectId) {
+export async function handoverProject(projectId, notes = '') {
   return request(`/projects/${encodeURIComponent(projectId)}/handover`, {
-    method: 'POST'
+    method: 'POST',
+    body: JSON.stringify({ notes })
   });
 }
 

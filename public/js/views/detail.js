@@ -1,6 +1,6 @@
 // public/js/views/detail.js - Logika Khusus Layar Detail Proyek & Verifikasi PM (UI-K01-03)
 import {
-  fetchProjectById,
+  fetchProjectIntakeDetail,
   updateDocumentStatus,
   approveProject,
   rejectProject
@@ -60,7 +60,7 @@ export const DetailView = {
 
   async loadAndRender(projectId, onToast) {
     try {
-      const res = await fetchProjectById(projectId);
+      const res = await fetchProjectIntakeDetail(projectId);
       const proj = res.data || res;
       this.activeProject = proj;
       this.renderHeader(proj);
@@ -84,8 +84,9 @@ export const DetailView = {
 
     // Kontrol Tombol Ubah Proyek (Hanya muncul jika DRAFT atau REVISI_HANDOVER)
     const btnEdit = document.getElementById('btnEditProject');
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
     if (btnEdit) {
-      if (proj.status === 'DRAFT' || proj.status === 'REVISI_HANDOVER') {
+      if ((proj.status === 'DRAFT' || proj.status === 'REVISI_HANDOVER') && currentUser.peran === 'AM') {
         btnEdit.classList.remove('hidden');
       } else {
         btnEdit.classList.add('hidden');
@@ -171,6 +172,9 @@ export const DetailView = {
   renderDocuments(proj) {
     const container = document.getElementById('documentListContainer');
     if (!container) return;
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
+    const isAm = currentUser.peran === 'AM';
+    const canAmUpdateDocuments = isAm && proj.status !== 'UNDER_REVIEW';
 
     // 1. Data 5 Berkas Dokumen Standar WI-01
     const standardDocs = [
@@ -205,7 +209,7 @@ export const DetailView = {
     let poCardHtml = '';
     if (proj.poReceived) {
       poCardHtml = `
-        <div id="poCardContainer" class="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/60 flex items-center justify-between cursor-pointer hover:bg-emerald-100/50 transition">
+        <div id="poCardContainer" class="p-3.5 rounded-xl border border-emerald-200 bg-emerald-50/60 flex items-center justify-between ${canAmUpdateDocuments ? 'cursor-pointer hover:bg-emerald-100/50 transition' : 'cursor-default'}">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 rounded-lg bg-emerald-100 text-emerald-700 flex items-center justify-center">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -223,7 +227,7 @@ export const DetailView = {
       `;
     } else {
       poCardHtml = `
-        <div id="poCardContainer" class="p-3.5 rounded-xl border border-dashed border-amber-300 bg-[#fef9ee] flex items-center justify-between cursor-pointer hover:bg-amber-100/50 transition">
+        <div id="poCardContainer" class="p-3.5 rounded-xl border border-dashed border-amber-300 bg-[#fef9ee] flex items-center justify-between ${canAmUpdateDocuments ? 'cursor-pointer hover:bg-amber-100/50 transition' : 'cursor-default'}">
           <div class="flex items-center space-x-3">
             <div class="w-8 h-8 rounded-lg bg-amber-100/80 text-amber-700 flex items-center justify-center">
               <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -245,9 +249,15 @@ export const DetailView = {
 
     // 3. Sinkronisasi Sakelar Dokumen Lengkap MANUAL
     const toggleDocs = document.getElementById('toggleDocsComplete');
+    const docsCompleteControl = document.getElementById('docsCompleteControl');
+    docsCompleteControl?.classList.toggle('hidden', currentUser.peran !== 'AM');
     if (toggleDocs) {
       toggleDocs.checked = Boolean(proj.documentsComplete);
+      toggleDocs.disabled = !canAmUpdateDocuments;
     }
+    docsCompleteControl?.classList.toggle('opacity-60', isAm && !canAmUpdateDocuments);
+    docsCompleteControl?.querySelector('label')?.classList.toggle('cursor-not-allowed', !canAmUpdateDocuments);
+    docsCompleteControl?.querySelector('label')?.classList.toggle('cursor-pointer', canAmUpdateDocuments);
 
     // 4. Kontrol Banner Peringatan Penagihan E-2
     const poBanner = document.getElementById('poWarningBanner');
@@ -280,7 +290,9 @@ export const DetailView = {
              : l.action === 'REJECT' ? 'Handover ditolak PM (Perlu Revisi)'
              : l.action === 'APPROVE' ? 'Disetujui & Resmi Terdaftar'
              : l.action,
-        actor: l.actorUserId ? (l.actorUserId.includes('SDM-0004') || l.actorUserId.includes('SDM-0008') ? (proj.pmName || 'PM') : (proj.amName || 'AM')) : 'Sistem',
+        actor: l.action === 'REJECT' || l.action === 'APPROVE'
+          ? (proj.pmName || 'PM')
+          : l.actorUserId ? (proj.amName || 'AM') : 'Sistem',
         time: this.formatTanggalWib(l.timestamp || l.createdAt),
         details: l.details || ''
       }));
@@ -320,7 +332,14 @@ export const DetailView = {
     container.innerHTML = timelineItems.map((item, idx) => {
       const dotColor = idx === 0 ? 'bg-slate-900 ring-4 ring-slate-100' : 'bg-slate-300';
       const titleColor = idx === 0 ? 'text-slate-900 font-bold' : 'text-slate-700 font-semibold';
-      const detailsHtml = item.details ? `<div class="mt-1 text-[10px] text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-100 italic font-medium">"${item.details}"</div>` : '';
+      const escapedDetails = String(item.details || '').replace(/[&<>"']/g, char => ({
+        '&': '&amp;',
+        '<': '&lt;',
+        '>': '&gt;',
+        '"': '&quot;',
+        "'": '&#39;'
+      })[char]);
+      const detailsHtml = escapedDetails ? `<div class="mt-1 text-[10px] text-rose-600 bg-rose-50 p-2 rounded-lg border border-rose-100 italic font-medium">"${escapedDetails}"</div>` : '';
 
       return `
         <div class="relative pb-3">
@@ -334,11 +353,15 @@ export const DetailView = {
   },
 
   renderPmPanel(proj) {
+    const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
+    const isAm = currentUser.peran === 'AM';
+    const isPm = currentUser.peran === 'PM';
     const btnApprove = document.getElementById('btnApprovePM');
     const btnReject = document.getElementById('btnRejectPM');
     const notesInput = document.getElementById('pmNotes');
     const errNotes = document.getElementById('errPmNotes');
     const charLabel = document.getElementById('charCountLabel');
+    const notesLabel = notesInput?.previousElementSibling;
 
     // Buat tombol Handover AM jika belum ada di DOM
     let btnHandover = document.getElementById('btnSubmitHandover');
@@ -356,15 +379,30 @@ export const DetailView = {
       btnApprove?.classList.add('hidden');
       btnReject?.classList.add('hidden');
       if (notesInput) {
-        notesInput.disabled = true;
+        const canReplyToPm = isAm && proj.status === 'REVISI_HANDOVER';
+        notesInput.disabled = !canReplyToPm;
         notesInput.value = '';
-        notesInput.placeholder = 'Panel keputusan PM akan aktif setelah AM mengajukan serah terima (handover).';
+        notesInput.placeholder = canReplyToPm
+          ? 'Tulis balasan atau keterangan perbaikan untuk PM (opsional).'
+          : 'Catatan revisi PM akan tampil saat proyek dikembalikan untuk revisi.';
+      }
+      if (notesLabel) {
+        notesLabel.innerHTML = proj.status === 'REVISI_HANDOVER' && isAm
+          ? 'Catatan balasan AM untuk PM (opsional)'
+          : 'Catatan Revisi PM (Min. 20 karakter) <span class="text-rose-500">*</span>';
       }
       if (errNotes) errNotes.classList.add('hidden');
-      if (charLabel) charLabel.classList.add('hidden');
+      if (charLabel) {
+        const showReplyCounter = isAm && proj.status === 'REVISI_HANDOVER';
+        charLabel.classList.toggle('hidden', !showReplyCounter);
+        if (showReplyCounter) {
+          charLabel.className = 'text-slate-400 font-semibold';
+          charLabel.textContent = 'Opsional · maksimal 1000 karakter';
+        }
+      }
 
       if (btnHandover) {
-        btnHandover.classList.remove('hidden');
+        btnHandover.classList.toggle('hidden', !isAm);
         btnHandover.innerHTML = proj.status === 'REVISI_HANDOVER'
           ? '<span>Ajukan Handover Ulang ke PM</span><span>→</span>'
           : '<span>Ajukan Serah Terima ke PM</span><span>→</span>';
@@ -373,8 +411,8 @@ export const DetailView = {
     // 2. KONDISI: Proyek UNDER_REVIEW (Wewenang PM Aktif)
     else if (proj.status === 'UNDER_REVIEW') {
       btnHandover?.classList.add('hidden');
-      btnApprove?.classList.remove('hidden');
-      btnReject?.classList.remove('hidden');
+      btnApprove?.classList.toggle('hidden', !isPm);
+      btnReject?.classList.toggle('hidden', !isPm);
 
       if (btnApprove) {
         btnApprove.disabled = false;
@@ -386,15 +424,21 @@ export const DetailView = {
         btnReject.classList.remove('opacity-50', 'cursor-not-allowed');
       }
       if (notesInput) {
-        notesInput.disabled = false;
+        notesInput.disabled = !isPm;
+        notesInput.value = '';
         notesInput.placeholder = 'Mohon unggah PO fisik dan konfirmasi jadwal pelaksanaan dengan klien.';
       }
-      if (charLabel) charLabel.classList.remove('hidden');
+      if (notesLabel) {
+        notesLabel.innerHTML = 'Catatan Revisi PM (Min. 20 karakter) <span class="text-rose-500">*</span>';
+      }
+      if (charLabel) charLabel.classList.toggle('hidden', !isPm);
+      btnApprove?.classList.toggle('hidden', !isPm);
+      btnReject?.classList.toggle('hidden', !isPm);
     } 
     // 3. KONDISI: Proyek REGISTERED (Terkunci Selesai)
     else if (proj.status === 'REGISTERED') {
       btnHandover?.classList.add('hidden');
-      btnApprove?.classList.remove('hidden');
+      btnApprove?.classList.toggle('hidden', !isPm);
       btnReject?.classList.add('hidden');
 
       if (btnApprove) {
@@ -402,10 +446,14 @@ export const DetailView = {
         btnApprove.className = 'w-full py-2.5 rounded-xl bg-slate-200 text-slate-500 text-xs font-bold cursor-not-allowed flex items-center justify-center space-x-2';
         btnApprove.innerHTML = '<span>✓</span><span>Proyek Resmi Terdaftar (REGISTERED)</span>';
       }
+      btnApprove?.classList.toggle('hidden', !isPm);
       if (notesInput) {
         notesInput.disabled = true;
         notesInput.value = '';
         notesInput.placeholder = 'Proyek telah resmi terdaftar. Panel verifikasi ditutup.';
+      }
+      if (notesLabel) {
+        notesLabel.innerHTML = 'Catatan Revisi PM (Min. 20 karakter) <span class="text-rose-500">*</span>';
       }
       if (errNotes) errNotes.classList.add('hidden');
       if (charLabel) charLabel.classList.add('hidden');
@@ -423,7 +471,10 @@ export const DetailView = {
         try {
           btn.disabled = true;
           const { handoverProject } = await import('../api.js');
-          const res = await handoverProject(this.activeProject.projectId);
+          const revisionNotes = this.activeProject.status === 'REVISI_HANDOVER'
+            ? document.getElementById('pmNotes')?.value.trim() || ''
+            : '';
+          const res = await handoverProject(this.activeProject.projectId, revisionNotes);
           this.activeProject = res.data || res;
           onToast(`Proyek berhasil diserahkan ke PM (${this.activeProject.status})`);
           await this.loadAndRender(this.activeProject.projectId, onToast);
@@ -436,15 +487,18 @@ export const DetailView = {
     });
 
     // 2. Tombol Ubah Data Proyek
-    document.getElementById('btnEditProject')?.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#btnEditProject')) return;
       if (this.activeProject?.projectId) {
         onOpenEdit(this.activeProject.projectId);
       }
     });
 
     // 3. Sakelar Manual Dokumen Lengkap (WI-01)
-    document.getElementById('toggleDocsComplete')?.addEventListener('change', async (e) => {
-      if (!this.activeProject) return;
+    document.addEventListener('change', async (e) => {
+      if (!e.target.matches('#toggleDocsComplete')) return;
+      if (JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}').peran !== 'AM' ||
+          !this.activeProject || this.activeProject.status === 'UNDER_REVIEW') return;
       try {
         const nextState = e.target.checked;
         const res = await updateDocumentStatus(this.activeProject.projectId, {
@@ -458,8 +512,10 @@ export const DetailView = {
       }
     });
 
-    // 4. Klik Kartu PO (Mengubah Status Unggahan PO & Peringatan E-2)
-    document.getElementById('documentListContainer')?.addEventListener('click', async (e) => {
+    // 4. Klik Kartu PO untuk mengubah status hanya melalui akun AM.
+    document.addEventListener('click', async (e) => {
+      if (JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}').peran !== 'AM' ||
+          this.activeProject?.status === 'UNDER_REVIEW') return;
       const poCard = e.target.closest('#poCardContainer');
       if (!poCard || !this.activeProject) return;
 
@@ -477,7 +533,8 @@ export const DetailView = {
     });
 
     // 5. Tombol Terima & Registrasi Proyek oleh PM
-    document.getElementById('btnApprovePM')?.addEventListener('click', async () => {
+    document.addEventListener('click', async (e) => {
+      if (!e.target.closest('#btnApprovePM')) return;
       if (!this.activeProject) return;
       try {
         const res = await approveProject(this.activeProject.projectId);
@@ -490,7 +547,8 @@ export const DetailView = {
     });
 
     // 6. Tombol Tolak (Butuh Revisi) oleh PM
-    document.getElementById('btnRejectPM')?.addEventListener('click', async () => {
+    document.addEventListener('click', async (e) => {
+      if (!e.target.closest('#btnRejectPM')) return;
       if (!this.activeProject) return;
       const notesInput = document.getElementById('pmNotes');
       const errEl = document.getElementById('errPmNotes');
@@ -522,12 +580,16 @@ export const DetailView = {
     });
 
     // 7. Penghitung Karakter Interaktif Catatan PM
-    const notesInput = document.getElementById('pmNotes');
-    const charLabel = document.getElementById('charCountLabel');
-    notesInput?.addEventListener('input', (e) => {
+    document.addEventListener('input', (e) => {
+      if (!e.target.matches('#pmNotes')) return;
       const len = e.target.value.trim().length;
+      const charLabel = document.getElementById('charCountLabel');
       if (charLabel) {
-        if (len >= 20) {
+        const currentUser = JSON.parse(localStorage.getItem('user') || '{"peran":"AM"}');
+        if (currentUser.peran === 'AM' && this.activeProject?.status === 'REVISI_HANDOVER') {
+          charLabel.className = 'text-slate-400 font-semibold';
+          charLabel.textContent = `${len}/1000 karakter (opsional)`;
+        } else if (len >= 20) {
           charLabel.className = 'text-emerald-600 font-semibold';
           charLabel.textContent = `${len}/20 karakter (Valid)`;
         } else {
@@ -538,7 +600,8 @@ export const DetailView = {
     });
 
     // Tombol Unduh Project Charter
-    document.getElementById('btnDownloadCharter')?.addEventListener('click', () => {
+    document.addEventListener('click', (e) => {
+      if (!e.target.closest('#btnDownloadCharter')) return;
       if (this.activeProject?.projectId) {
         window.open(`/api/v1/projects/${this.activeProject.projectId}/charter`, '_blank');
       }

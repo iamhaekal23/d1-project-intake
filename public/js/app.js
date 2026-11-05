@@ -2,7 +2,7 @@
 import { DashboardView } from './views/dashboard.js';
 import { FormView } from './views/form.js';
 import { DetailView } from './views/detail.js';
-import { fetchProjectById, loginF1 } from './api.js';
+import { fetchEmployees, fetchProjectIntakeDetail, fetchProjects, loginF1 } from './api.js';
 
 class AppRouter {
   constructor() {
@@ -12,7 +12,18 @@ class AppRouter {
     this.templates = {};
     this.currentView = null;
     this._toastTimer = null;
-    this.currentUser = JSON.parse(localStorage.getItem('user')) || {
+    this.pmCandidates = [];
+    const savedPmAccounts = JSON.parse(localStorage.getItem('pmAccounts') || '[]');
+    this.pmAccounts = Array.isArray(savedPmAccounts)
+      ? savedPmAccounts.filter(account => account && account.employeeId && account.namaLengkap)
+      : [];
+    const savedUser = JSON.parse(localStorage.getItem('user'));
+    this.currentUser = savedUser ? {
+      ...savedUser,
+      ...(savedUser.peran === 'PM' && !savedUser.employeeId
+        ? { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01' }
+        : {})
+    } : {
       akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
       namaLengkap: 'Fikri Lazuardi Fadilla',
       email: 'account.manager@anaheimnimbus.co.id',
@@ -119,18 +130,136 @@ class AppRouter {
     }
 
     if (nameEl) nameEl.textContent = currentUser.namaLengkap || 'Fikri Lazuardi Fadilla';
-    if (roleEl) roleEl.textContent = currentUser.peran === 'AM' ? 'Account Manager' : (currentUser.peran || 'Pengguna');
+    if (roleEl) {
+      roleEl.textContent = currentUser.peran === 'AM'
+        ? 'Account Manager'
+        : currentUser.peran === 'PM' ? 'Project Manager' : (currentUser.peran || 'Pengguna');
+    }
     if (avatarEl && currentUser.namaLengkap) {
       const initials = currentUser.namaLengkap.split(' ').map(n => n[0]).slice(0, 2).join('');
       avatarEl.textContent = initials.toUpperCase();
     }
+    const accountSwitcher = document.getElementById('accountSwitcher');
+    if (accountSwitcher) accountSwitcher.value = this.getAccountKey(currentUser);
+  }
+
+  getDefaultPmAccount() {
+    return {
+      akunId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01',
+      employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01',
+      namaLengkap: 'Haekal Khadafy',
+      email: 'haekal.khadafy@anaheimnimbus.co.id',
+      peran: 'PM',
+      roleCode: 'PM'
+    };
+  }
+
+  getPmAccounts() {
+    const accounts = [this.getDefaultPmAccount(), ...this.pmAccounts];
+    if (this.currentUser.peran === 'PM'
+      && this.currentUser.employeeId
+      && !accounts.some(account => account.employeeId === this.currentUser.employeeId)) {
+      accounts.push(this.currentUser);
+    }
+    return accounts;
+  }
+
+  getAccountKey(user) {
+    return user.peran === 'PM' ? `PM:${user.employeeId}` : 'AM';
+  }
+
+  renderAccountSwitcher(selectedKey = this.getAccountKey(this.currentUser)) {
+    const accountSwitcher = document.getElementById('accountSwitcher');
+    if (!accountSwitcher) return;
+
+    accountSwitcher.replaceChildren(new Option('AM · Fikri Lazuardi', 'AM'));
+    this.getPmAccounts().forEach(account => {
+      accountSwitcher.add(new Option(`PM · ${account.namaLengkap}`, this.getAccountKey(account)));
+    });
+    accountSwitcher.value = selectedKey;
+  }
+
+  async loadPmCandidates() {
+    const result = await fetchEmployees();
+    const employees = result.items || result.data || (Array.isArray(result) ? result : []);
+    const addedIds = new Set(this.getPmAccounts().map(account => account.employeeId));
+    this.pmCandidates = employees.filter(employee => {
+      const employeeId = employee.employeeId || employee.id;
+      const title = employee.namaJabatan || employee.jobTitle || '';
+      return employeeId
+        && (!title || /project manager|manajer proyek|\bpm\b/i.test(title))
+        && !addedIds.has(employeeId);
+    });
+
+    const candidateSelect = document.getElementById('pmAccountCandidate');
+    if (!candidateSelect) return;
+    candidateSelect.replaceChildren(new Option(
+      this.pmCandidates.length ? 'Pilih pegawai PM' : 'Tidak ada PM lain tersedia',
+      ''
+    ));
+    this.pmCandidates.forEach(employee => {
+      const employeeId = employee.employeeId || employee.id;
+      const name = employee.namaLengkap || employee.name || 'Tanpa Nama';
+      candidateSelect.add(new Option(name, employeeId));
+    });
+  }
+
+  async addPmAccount() {
+    const candidateId = document.getElementById('pmAccountCandidate')?.value;
+    const employee = this.pmCandidates.find(item => (item.employeeId || item.id) === candidateId);
+    if (!employee) {
+      this.showToast('Pilih pegawai PM terlebih dahulu', true);
+      return;
+    }
+
+    const employeeId = employee.employeeId || employee.id;
+    const account = {
+      akunId: employeeId,
+      employeeId,
+      namaLengkap: employee.namaLengkap || employee.name || 'Tanpa Nama',
+      email: employee.email || '',
+      peran: 'PM',
+      roleCode: 'PM'
+    };
+    this.pmAccounts = [...this.pmAccounts, account];
+    localStorage.setItem('pmAccounts', JSON.stringify(this.pmAccounts));
+    this.renderAccountSwitcher(this.getAccountKey(account));
+    document.getElementById('addPmAccountPanel')?.classList.add('hidden');
+    document.getElementById('btnAddPmAccount')?.setAttribute('aria-expanded', 'false');
+    this.switchAccount(this.getAccountKey(account));
+  }
+
+  switchAccount(accountKey) {
+    const selectedAccount = accountKey === 'AM'
+      ? {
+          akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+          namaLengkap: 'Fikri Lazuardi Fadilla',
+          email: 'account.manager@anaheimnimbus.co.id',
+          peran: 'AM',
+          roleCode: 'AM'
+        }
+      : this.getPmAccounts().find(account => this.getAccountKey(account) === accountKey);
+    if (!selectedAccount) return;
+
+    this.currentUser = selectedAccount;
+    localStorage.setItem('user', JSON.stringify(selectedAccount));
+    if (!localStorage.getItem('token')) {
+      localStorage.setItem('token', 'mock-jwt-token-f1-account-manager-2026');
+    }
+    DashboardView.currentPage = 1;
+    this.updateSidebarProfile(selectedAccount);
+    this.navigateToDashboard();
+    this.showToast(`Beralih ke akun ${selectedAccount.peran === 'AM' ? 'Account Manager' : `PM · ${selectedAccount.namaLengkap}`}`);
   }
 
   // Sinkronisasi Sesi Autentikasi dengan API F-1
   async syncProfileWithF1() {
+    if (this.currentUser.peran === 'PM') return;
+
     try {
       const authData = await loginF1('account.manager', 'Password123!');
       if (authData?.user) {
+        if (this.currentUser.peran === 'PM') return;
         localStorage.setItem('token', authData.accessToken || authData.token);
         localStorage.setItem('user', JSON.stringify(authData.user));
         this.currentUser = authData.user;
@@ -149,15 +278,26 @@ class AppRouter {
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Dasbor proyek';
     this.appContent.innerHTML = this.templates.dashboard;
 
-    document.getElementById('btnNavCreate')?.addEventListener('click', () => {
-      this.navigateToCreate();
-    });
+    const isPm = this.currentUser.peran === 'PM';
+    document.getElementById('draftMetricCard')?.classList.toggle('hidden', isPm);
+    document.getElementById('amPmFilter')?.classList.toggle('hidden', isPm);
+    document.getElementById('metricsCardGrid')?.classList.toggle('lg:grid-cols-4', !isPm);
+    document.getElementById('metricsCardGrid')?.classList.toggle('lg:grid-cols-3', isPm);
+
+    const btnNavCreate = document.getElementById('btnNavCreate');
+    if (btnNavCreate) {
+      btnNavCreate.classList.toggle('hidden', this.currentUser.peran !== 'AM');
+      btnNavCreate.addEventListener('click', () => this.navigateToCreate());
+    }
 
     // Listener Tombol Ekspor Tabel Proyek ke CSV
     document.getElementById('btnExportProjects')?.addEventListener('click', async () => {
       try {
-        const res = await fetch('/api/v1/projects');
-        const json = await res.json();
+        const json = await fetchProjects({
+          page: 1,
+          limit: 100,
+          pmEmployeeId: this.currentUser.peran === 'PM' ? this.currentUser.employeeId : undefined
+        });
         const projects = json.data || json.items || json || [];
 
         if (!Array.isArray(projects) || projects.length === 0) {
@@ -223,7 +363,8 @@ class AppRouter {
       DashboardView.currentPage = 1;
       DashboardView.render(
         (id) => this.navigateToDetail(id),
-        (id) => this.navigateToEdit(id)
+        (id) => this.navigateToEdit(id),
+        this.currentUser
       );
     };
 
@@ -234,12 +375,17 @@ class AppRouter {
     // Render data tabel dan kartu metrik
     await DashboardView.render(
       (id) => this.navigateToDetail(id),
-      (id) => this.navigateToEdit(id)
+      (id) => this.navigateToEdit(id),
+      this.currentUser
     );
   }
 
   // Tampilan Form Registrasi Draf Baru (UI-K01-02)
   async navigateToCreate() {
+    if (this.currentUser.peran !== 'AM') {
+      this.showToast('Hanya akun AM yang dapat membuat proyek', true);
+      return;
+    }
     this.currentView = 'create';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Draf proyek baru';
     this.appContent.innerHTML = this.templates.form;
@@ -251,13 +397,17 @@ class AppRouter {
 
   // Tampilan Form Ubah Draf (UI-K01-02 Edit Mode)
   async navigateToEdit(projectId) {
+    if (this.currentUser.peran !== 'AM') {
+      this.showToast('Hanya akun AM yang dapat mengubah proyek', true);
+      return;
+    }
     this.currentView = 'edit';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Ubah draf proyek';
     this.appContent.innerHTML = this.templates.form;
 
     await FormView.loadMasterData();
     try {
-      const res = await fetchProjectById(projectId);
+      const res = await fetchProjectIntakeDetail(projectId);
       const proj = res.data || res;
       FormView.populateForEdit(proj);
       this.attachFormEvents();
@@ -278,7 +428,11 @@ class AppRouter {
       FormView.handleFormSubmit(
         false,
         async (saved, msg) => {
-          await this.navigateToDashboard();
+          if (this.currentView === 'edit') {
+            await this.navigateToDetail(saved.projectId);
+          } else {
+            await this.navigateToDashboard();
+          }
           this.showToast(msg);
         },
         (errMsg) => this.showToast(errMsg, true)
@@ -289,7 +443,11 @@ class AppRouter {
       FormView.handleFormSubmit(
         true,
         async (saved, msg) => {
-          await this.navigateToDashboard();
+          if (this.currentView === 'edit') {
+            await this.navigateToDetail(saved.projectId);
+          } else {
+            await this.navigateToDashboard();
+          }
           this.showToast(msg);
         },
         (errMsg) => this.showToast(errMsg, true)
@@ -339,6 +497,36 @@ class AppRouter {
       localStorage.removeItem('user');
       localStorage.removeItem('token');
       location.reload();
+    });
+
+    document.getElementById('accountSwitcher')?.addEventListener('change', (event) => {
+      this.switchAccount(event.target.value);
+    });
+    this.renderAccountSwitcher();
+
+    document.getElementById('btnAddPmAccount')?.addEventListener('click', async () => {
+      const panel = document.getElementById('addPmAccountPanel');
+      if (!panel) return;
+      panel.classList.toggle('hidden');
+      document.getElementById('btnAddPmAccount')?.setAttribute(
+        'aria-expanded',
+        String(!panel.classList.contains('hidden'))
+      );
+      if (!panel.classList.contains('hidden')) {
+        try {
+          await this.loadPmCandidates();
+        } catch (err) {
+          panel.classList.add('hidden');
+          document.getElementById('btnAddPmAccount')?.setAttribute('aria-expanded', 'false');
+          console.error('Gagal memuat daftar akun PM:', err);
+          this.showToast(err.message || 'Gagal memuat daftar pegawai PM', true);
+        }
+      }
+    });
+    document.getElementById('btnSavePmAccount')?.addEventListener('click', () => this.addPmAccount());
+    document.getElementById('btnCancelAddPmAccount')?.addEventListener('click', () => {
+      document.getElementById('addPmAccountPanel')?.classList.add('hidden');
+      document.getElementById('btnAddPmAccount')?.setAttribute('aria-expanded', 'false');
     });
 
     // Render dasbor terlebih dahulu agar tidak ada jeda tampilan
