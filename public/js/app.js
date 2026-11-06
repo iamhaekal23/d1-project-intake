@@ -1,4 +1,4 @@
-// public/js/app.js - Main Router & State Orchestrator Modul D-1
+// public/js/app.js - Main Router & State Orchestrator Modul D1
 import { DashboardView } from './views/dashboard.js';
 import { FormView } from './views/form.js';
 import { DetailView } from './views/detail.js';
@@ -13,41 +13,44 @@ class AppRouter {
     this.currentView = null;
     this._toastTimer = null;
     this.pmCandidates = [];
+    this.isF2Live = false;
+    this.livePmAccounts = [];
+
+    // Profil awal AM dari sesi lokal atau default
+    this.amAccount = {
+      akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+      employeeId: null,
+      namaLengkap: 'Fikri Lazuardi Fadilla (AM)',
+      email: 'fikri.lazuardi@anaheimnimbus.co.id',
+      peran: 'AM',
+      roleCode: 'AM'
+    };
+
     const savedPmAccounts = JSON.parse(localStorage.getItem('pmAccounts') || '[]');
     this.pmAccounts = Array.isArray(savedPmAccounts)
       ? savedPmAccounts.filter(account => account && account.employeeId && account.namaLengkap)
       : [];
+
     const savedUser = JSON.parse(localStorage.getItem('user'));
     this.currentUser = savedUser ? {
       ...savedUser,
       ...(savedUser.peran === 'PM' && !savedUser.employeeId
         ? { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01' }
         : {})
-    } : {
-      akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
-      namaLengkap: 'Fikri Lazuardi Fadilla',
-      email: 'account.manager@anaheimnimbus.co.id',
-      peran: 'AM'
-    };
+    } : this.amAccount;
   }
 
-  // Notifikasi Toast Global
   showToast(message, isError = false) {
     const toast = document.getElementById('toast');
     const toastMsg = document.getElementById('toastMsg');
-    const toastIcon = document.getElementById('toastIcon');
     if (!toast || !toastMsg) return;
 
     toastMsg.textContent = message;
-    if (toastIcon) {
-      toastIcon.textContent = isError ? '✕' : '✓';
-      toastIcon.className = isError ? 'text-rose-400 font-bold text-sm' : 'text-emerald-400 font-bold text-sm';
-    }
 
     if (isError) {
-      toast.className = 'fixed top-16 right-8 bg-rose-900 text-white px-5 py-3 rounded-xl shadow-2xl text-xs font-medium z-50 flex items-center space-x-2.5 border border-rose-700 transition-all duration-300';
+      toast.className = 'fixed top-16 right-8 bg-rose-900 text-white px-5 py-3 rounded-xl shadow-2xl text-xs font-medium z-50 flex items-center border border-rose-700 transition-all duration-300';
     } else {
-      toast.className = 'fixed top-16 right-8 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl text-xs font-medium z-50 flex items-center space-x-2.5 border border-slate-700 transition-all duration-300';
+      toast.className = 'fixed top-16 right-8 bg-slate-900 text-white px-5 py-3 rounded-xl shadow-2xl text-xs font-medium z-50 flex items-center border border-slate-700 transition-all duration-300';
     }
 
     toast.classList.remove('hidden');
@@ -58,7 +61,6 @@ class AppRouter {
     }, 4000);
   }
 
-  // Prapemuatan seluruh template HTML dari public/components/
   async loadComponents() {
     try {
       const [dashHtml, formHtml, detailHtml, modalHtml] = await Promise.all([
@@ -83,62 +85,33 @@ class AppRouter {
     }
   }
 
-  // Pembaruan profil akun aktif di sidebar
   updateSidebarProfile(user = null) {
-    const currentUser = user || this.currentUser || JSON.parse(localStorage.getItem('user')) || {
-      namaLengkap: 'Fikri Lazuardi Fadilla',
-      peran: 'AM'
-    };
+    const currentUser = user || this.currentUser || this.amAccount;
 
-    let nameEl = document.getElementById('sidebarUserName');
-    let roleEl = document.getElementById('sidebarUserRole');
-    let avatarEl = document.getElementById('sidebarUserAvatar');
+    const nameEl = document.getElementById('sidebarUserName');
+    const roleEl = document.getElementById('sidebarUserRole');
+    const avatarEl = document.getElementById('sidebarUserAvatar');
 
-    // Pencarian elemen otomatis jika ID belum terpasang di HTML sidebar
-    if (!nameEl) {
-      const candidates = document.querySelectorAll('aside .text-white.leading-tight, aside .font-semibold.text-white');
-      for (const el of candidates) {
-        if (el.textContent.includes('Andi') || el.textContent.includes('Fikri') || el.textContent.includes('Account')) {
-          nameEl = el;
-          nameEl.id = 'sidebarUserName';
-          break;
-        }
-      }
-    }
-
-    if (!roleEl) {
-      const candidates = document.querySelectorAll('aside .text-slate-400, aside .text-\\[10px\\].text-slate-400');
-      for (const el of candidates) {
-        if (el.textContent.includes('Account Manager') || el.textContent.includes('AM')) {
-          roleEl = el;
-          roleEl.id = 'sidebarUserRole';
-          break;
-        }
-      }
-    }
-
-    if (!avatarEl) {
-      const candidates = document.querySelectorAll('aside .w-8.h-8, aside .w-9.h-9, aside .rounded-lg, aside .rounded-full');
-      for (const el of candidates) {
-        const txt = el.textContent.trim();
-        if (txt === 'AM' || txt === 'FL') {
-          avatarEl = el;
-          avatarEl.id = 'sidebarUserAvatar';
-          break;
-        }
-      }
-    }
-
-    if (nameEl) nameEl.textContent = currentUser.namaLengkap || 'Fikri Lazuardi Fadilla';
+    if (nameEl) nameEl.textContent = currentUser.namaLengkap;
     if (roleEl) {
       roleEl.textContent = currentUser.peran === 'AM'
         ? 'Account Manager'
         : currentUser.peran === 'PM' ? 'Project Manager' : (currentUser.peran || 'Pengguna');
     }
+
+    // Avatar inisial: FL untuk Fikri, AM untuk Account Manager resmi F1
     if (avatarEl && currentUser.namaLengkap) {
-      const initials = currentUser.namaLengkap.split(' ').map(n => n[0]).slice(0, 2).join('');
-      avatarEl.textContent = initials.toUpperCase();
+      let initials = 'AM';
+      if (currentUser.namaLengkap.includes('Fikri')) {
+        initials = 'FL';
+      } else if (currentUser.namaLengkap === 'Account Manager') {
+        initials = 'AM';
+      } else {
+        initials = currentUser.namaLengkap.split(' ').map(n => n[0]).slice(0, 2).join('').toUpperCase();
+      }
+      avatarEl.textContent = initials;
     }
+
     const accountSwitcher = document.getElementById('accountSwitcher');
     if (accountSwitcher) accountSwitcher.value = this.getAccountKey(currentUser);
   }
@@ -155,6 +128,10 @@ class AppRouter {
   }
 
   getPmAccounts() {
+    if (this.isF2Live && this.livePmAccounts && this.livePmAccounts.length > 0) {
+      return this.livePmAccounts;
+    }
+
     const accounts = [this.getDefaultPmAccount(), ...this.pmAccounts];
     if (this.currentUser.peran === 'PM'
       && this.currentUser.employeeId
@@ -172,11 +149,82 @@ class AppRouter {
     const accountSwitcher = document.getElementById('accountSwitcher');
     if (!accountSwitcher) return;
 
-    accountSwitcher.replaceChildren(new Option('AM · Fikri Lazuardi', 'AM'));
+    // Bersihkan opsi lama dan tetapkan nama AM aktif
+    const amDisplayName = this.amAccount.namaLengkap.replace(' (AM)', '');
+    accountSwitcher.replaceChildren(new Option(`AM · ${amDisplayName}`, 'AM'));
+
+    // Masukkan hanya akun PM resmi
     this.getPmAccounts().forEach(account => {
       accountSwitcher.add(new Option(`PM · ${account.namaLengkap}`, this.getAccountKey(account)));
     });
-    accountSwitcher.value = selectedKey;
+
+    const validKeys = Array.from(accountSwitcher.options).map(opt => opt.value);
+    if (validKeys.includes(selectedKey)) {
+      accountSwitcher.value = selectedKey;
+    } else {
+      accountSwitcher.value = 'AM';
+    }
+  }
+
+  // Sinkronisasi SDM dari F2: HANYA saring Project Manager
+  async syncAccountsWithF2() {
+    try {
+      const res = await fetchEmployees();
+      const items = res.items || res.data || (Array.isArray(res) ? res : []);
+      const isLive = res.source === 'F2_LIVE_API' || res.source === 'F2_API';
+
+      if (isLive && items.length > 0) {
+        this.isF2Live = true;
+
+        const pms = items.filter(emp => {
+          const title = (emp.namaJabatan || emp.jobTitle || '').toLowerCase();
+          return (
+            title.includes('project manager') ||
+            title.includes('manajer proyek') ||
+            title.includes('pm')
+          ) && !title.includes('junior');
+        });
+
+        const targetList = pms.length > 0 ? pms : items;
+
+        this.livePmAccounts = targetList.map(pm => {
+          const empId = pm.employeeId || pm.id;
+          const nama = pm.namaLengkap || pm.name || 'Sandy Walsh';
+          return {
+            akunId: empId,
+            employeeId: empId,
+            namaLengkap: nama,
+            email: `${nama.toLowerCase().replace(/[^a-z0-9]/g, '.')}@anaheimnimbus.co.id`,
+            peran: 'PM',
+            roleCode: 'PM',
+            namaJabatan: pm.namaJabatan || 'Project Manager'
+          };
+        });
+
+        localStorage.removeItem('pmAccounts');
+        this.pmAccounts = [];
+
+        if (this.currentUser.peran === 'PM') {
+          const matchingLivePm = this.livePmAccounts.find(p => p.employeeId === this.currentUser.employeeId);
+          if (!matchingLivePm && this.livePmAccounts.length > 0) {
+            this.currentUser = this.livePmAccounts[0];
+            localStorage.setItem('user', JSON.stringify(this.currentUser));
+            this.updateSidebarProfile(this.currentUser);
+          }
+        }
+
+        this.renderAccountSwitcher();
+      } else {
+        this.isF2Live = false;
+        this.livePmAccounts = [];
+        this.renderAccountSwitcher();
+      }
+    } catch (err) {
+      console.warn('[App] F-2 luring, menggunakan daftar PM fallback:', err.message);
+      this.isF2Live = false;
+      this.livePmAccounts = [];
+      this.renderAccountSwitcher();
+    }
   }
 
   async loadPmCandidates() {
@@ -230,49 +278,75 @@ class AppRouter {
   }
 
   switchAccount(accountKey) {
-    const selectedAccount = accountKey === 'AM'
-      ? {
-          akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
-          namaLengkap: 'Fikri Lazuardi Fadilla',
-          email: 'account.manager@anaheimnimbus.co.id',
-          peran: 'AM',
-          roleCode: 'AM'
-        }
-      : this.getPmAccounts().find(account => this.getAccountKey(account) === accountKey);
+    let selectedAccount = null;
+
+    if (accountKey === 'AM') {
+      selectedAccount = this.amAccount;
+    } else {
+      selectedAccount = this.getPmAccounts().find(account => this.getAccountKey(account) === accountKey);
+    }
+
     if (!selectedAccount) return;
 
     this.currentUser = selectedAccount;
     localStorage.setItem('user', JSON.stringify(selectedAccount));
-    if (!localStorage.getItem('token')) {
-      localStorage.setItem('token', 'mock-jwt-token-f1-account-manager-2026');
-    }
+
     DashboardView.currentPage = 1;
     this.updateSidebarProfile(selectedAccount);
     this.navigateToDashboard();
-    this.showToast(`Beralih ke akun ${selectedAccount.peran === 'AM' ? 'Account Manager' : `PM · ${selectedAccount.namaLengkap}`}`);
+    this.showToast(`Beralih ke akun ${selectedAccount.peran === 'AM' ? `Account Manager · ${selectedAccount.namaLengkap}` : `PM · ${selectedAccount.namaLengkap}`}`);
   }
 
-  // Sinkronisasi Sesi Autentikasi dengan API F-1
+  // Sinkronisasi Sesi Autentikasi dengan API F1
   async syncProfileWithF1() {
-    if (this.currentUser.peran === 'PM') return;
-
     try {
       const authData = await loginF1('account.manager', 'Password123!');
       if (authData?.user) {
-        if (this.currentUser.peran === 'PM') return;
         localStorage.setItem('token', authData.accessToken || authData.token);
-        localStorage.setItem('user', JSON.stringify(authData.user));
-        this.currentUser = authData.user;
-        this.updateSidebarProfile(this.currentUser);
-        console.log(`[D-1] Profil akun tersinkronisasi (${authData.source || 'F1'}):`, this.currentUser);
+
+        // Bedakan nama tampilan berdasarkan source F1 Live vs Local Fallback
+        const isLive = authData.source === 'F1_LIVE_API';
+        const activeName = isLive
+          ? 'Account Manager'
+          : (authData.user.namaLengkap || 'Fikri Lazuardi Fadilla (AM)');
+
+        this.amAccount = {
+          akunId: authData.user.akunId,
+          employeeId: authData.user.employeeId || null,
+          namaLengkap: activeName,
+          email: authData.user.email || 'account.manager@anaheimnimbus.co.id',
+          peran: 'AM',
+          roleCode: authData.user.roleCode || 'AM'
+        };
+
+        if (this.currentUser.peran === 'AM') {
+          this.currentUser = this.amAccount;
+          localStorage.setItem('user', JSON.stringify(this.amAccount));
+          this.updateSidebarProfile(this.currentUser);
+        }
+
+        this.renderAccountSwitcher();
+        console.log(`[D1] Profil AM sinkron (${authData.source}):`, this.amAccount.namaLengkap);
       }
     } catch (err) {
-      console.warn('[D-1] Menggunakan sesi akun lokal (F-1 offline):', err.message);
-      this.updateSidebarProfile();
+      console.warn('[D1] Koneksi login gagal, menerapkan fallback lokal Fikri:', err.message);
+      this.amAccount = {
+        akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
+        employeeId: null,
+        namaLengkap: 'Fikri Lazuardi Fadilla (AM)',
+        email: 'fikri.lazuardi@anaheimnimbus.co.id',
+        peran: 'AM',
+        roleCode: 'AM'
+      };
+      if (this.currentUser.peran === 'AM') {
+        this.currentUser = this.amAccount;
+        localStorage.setItem('user', JSON.stringify(this.amAccount));
+        this.updateSidebarProfile(this.currentUser);
+      }
+      this.renderAccountSwitcher();
     }
   }
 
-  // Tampilan Dasbor Proyek (UI-K01-01)
   async navigateToDashboard() {
     this.currentView = 'dashboard';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Dasbor proyek';
@@ -290,7 +364,6 @@ class AppRouter {
       btnNavCreate.addEventListener('click', () => this.navigateToCreate());
     }
 
-    // Listener Tombol Ekspor Tabel Proyek ke CSV
     document.getElementById('btnExportProjects')?.addEventListener('click', async () => {
       try {
         const json = await fetchProjects({
@@ -325,8 +398,8 @@ class AppRouter {
           `"${p.projectId || ''}"`,
           `"${(p.projectName || '').replace(/"/g, '""')}"`,
           `"${(p.clientName || p.clientId || '').replace(/"/g, '""')}"`,
-          `"${p.amName || 'Fikri Lazuardi Fadilla'}"`,
-          `"${p.pmName || 'Haekal Khadafy'}"`,
+          `"${p.amName || 'Account Manager'}"`,
+          `"${p.pmName || 'Sandy Walsh'}"`,
           `"${p.startDate || '—'}"`,
           `"${p.targetEndDate || '—'}"`,
           `"${Number(p.indicativeValue || 0)}"`,
@@ -372,7 +445,6 @@ class AppRouter {
     statusFilter?.addEventListener('change', handleFilter);
     amPmFilter?.addEventListener('change', handleFilter);
 
-    // Render data tabel dan kartu metrik
     await DashboardView.render(
       (id) => this.navigateToDetail(id),
       (id) => this.navigateToEdit(id),
@@ -380,7 +452,6 @@ class AppRouter {
     );
   }
 
-  // Tampilan Form Registrasi Draf Baru (UI-K01-02)
   async navigateToCreate() {
     if (this.currentUser.peran !== 'AM') {
       this.showToast('Hanya akun AM yang dapat membuat proyek', true);
@@ -395,7 +466,6 @@ class AppRouter {
     this.attachFormEvents();
   }
 
-  // Tampilan Form Ubah Draf (UI-K01-02 Edit Mode)
   async navigateToEdit(projectId) {
     if (this.currentUser.peran !== 'AM') {
       this.showToast('Hanya akun AM yang dapat mengubah proyek', true);
@@ -417,7 +487,6 @@ class AppRouter {
     }
   }
 
-  // Event listener tombol aksi form
   attachFormEvents() {
     document.getElementById('btnBackFromCreate')?.addEventListener('click', () => this.navigateToDashboard());
     document.getElementById('btnCancelCreate')?.addEventListener('click', () => this.navigateToDashboard());
@@ -460,7 +529,6 @@ class AppRouter {
     );
   }
 
-  // Tampilan Rincian Proyek & Dokumen WI-01 (UI-K01-03)
   async navigateToDetail(projectId) {
     this.currentView = 'detail';
     if (this.breadcrumbCurrent) this.breadcrumbCurrent.textContent = 'Detail proyek';
@@ -470,18 +538,17 @@ class AppRouter {
 
     DetailView.initListeners(
       (id) => this.navigateToEdit(id),
-      (msg, isErr) => this.showToast(msg, isErr)
+      (msg, isErr) => this.showToast(msg, isErr),
+      () => this.navigateToDashboard()
     );
 
     await DetailView.loadAndRender(projectId, (msg, isErr) => this.showToast(msg, isErr));
   }
 
-  // Inisialisasi awal saat halaman dibuka
   async init() {
     this.updateSidebarProfile();
     await this.loadComponents();
 
-    // Link Sidebar & Header
     ['navProjectIntake', 'menuIntake'].forEach(id => {
       document.getElementById(id)?.addEventListener('click', (e) => {
         e.preventDefault();
@@ -494,15 +561,13 @@ class AppRouter {
     });
 
     document.getElementById('btnLogout')?.addEventListener('click', () => {
-      localStorage.removeItem('user');
-      localStorage.removeItem('token');
+      localStorage.clear();
       location.reload();
     });
 
     document.getElementById('accountSwitcher')?.addEventListener('change', (event) => {
       this.switchAccount(event.target.value);
     });
-    this.renderAccountSwitcher();
 
     document.getElementById('btnAddPmAccount')?.addEventListener('click', async () => {
       const panel = document.getElementById('addPmAccountPanel');
@@ -529,15 +594,12 @@ class AppRouter {
       document.getElementById('btnAddPmAccount')?.setAttribute('aria-expanded', 'false');
     });
 
-    // Render dasbor terlebih dahulu agar tidak ada jeda tampilan
     await this.navigateToDashboard();
-
-    // Jalankan sinkronisasi F-1 secara asynchronous di latar belakang
-    this.syncProfileWithF1();
+    await this.syncAccountsWithF2();
+    await this.syncProfileWithF1();
   }
 }
 
-// Jalankan Router Aplikasi
 document.addEventListener('DOMContentLoaded', () => {
   const router = new AppRouter();
   router.init();
