@@ -1,4 +1,4 @@
-// public/js/views/form.js - Logika Tampilan Formulir Draf Proyek & Modal Klien
+// public/js/views/form.js - Logika Formulir Registrasi Draf Proyek & Modal Klien
 import {
   createProject,
   updateProject,
@@ -25,17 +25,29 @@ export const FormView = {
 
   async loadMasterData() {
     try {
-      // 1. Ambil data SDM dari backend D-1 (terhubung ke F-2 atau fallback lokal kelompok)
-      const resSdm = await fetch('/api/v1/referensi/sdm');
-      const jsonSdm = await resSdm.json();
+      // 1. Ambil data SDM melalui helper API
+      const jsonSdm = await fetchEmployees();
       this.employeesList = jsonSdm.items || jsonSdm.data || (Array.isArray(jsonSdm) ? jsonSdm : []);
 
       const pmSelect = document.getElementById('pmSelect');
       if (pmSelect) {
-        if (this.employeesList.length === 0) {
-          pmSelect.innerHTML = '<option value="">-- Tidak ada SDM tersedia --</option>';
+        // Saring khusus personil yang memiliki jabatan Project Manager (mengecualikan Junior Programmer)
+        const pmEmployees = this.employeesList.filter(emp => {
+          const title = (emp.namaJabatan || emp.jobTitle || '').toLowerCase();
+          return (
+            title.includes('project manager') ||
+            title.includes('manajer proyek') ||
+            title.includes('pm')
+          ) && !title.includes('junior');
+        });
+
+        // Gunakan hasil filter jika ada; jika tidak ada, gunakan daftar SDM yang tersedia
+        const targetPmList = pmEmployees.length > 0 ? pmEmployees : this.employeesList;
+
+        if (targetPmList.length === 0) {
+          pmSelect.innerHTML = '<option value="">-- Tidak ada PM tersedia --</option>';
         } else {
-          pmSelect.innerHTML = this.employeesList.map(pm => {
+          pmSelect.innerHTML = targetPmList.map(pm => {
             const id = pm.employeeId || pm.id || '';
             const nama = pm.namaLengkap || pm.name || 'Tanpa Nama';
             const jabatan = pm.namaJabatan || 'Project Manager';
@@ -44,9 +56,8 @@ export const FormView = {
         }
       }
 
-      // 2. Ambil data Klien dari endpoint F-6 / Temporary Client
-      const resClients = await fetch('/api/v1/clients');
-      const jsonClients = await resClients.json();
+      // 2. Ambil data Klien melalui helper API
+      const jsonClients = await fetchClients();
       this.clientsList = jsonClients.data || jsonClients.items || (Array.isArray(jsonClients) ? jsonClients : []);
 
       const clientSelect = document.getElementById('clientSelect');
@@ -55,9 +66,9 @@ export const FormView = {
           clientSelect.innerHTML = '<option value="">-- Tidak ada klien tersedia --</option>';
         } else {
           clientSelect.innerHTML = this.clientsList.map(c => {
-            const id = c.clientId || c.id || '';
+            const id = c.clientId || c.code || c.id || '';
             const nama = c.name || c.companyName || '';
-            return `<option value="${id}" data-id="${id}" data-name="${nama}">${nama}</option>`;
+            return `<option value="${id}" data-name="${nama}">${nama}</option>`;
           }).join('');
         }
       }
@@ -66,33 +77,8 @@ export const FormView = {
     }
   },
 
-  populateDropdowns() {
-    const clientSelect = document.getElementById('clientSelect');
-    if (clientSelect && this.clientsList.length > 0) {
-      clientSelect.innerHTML = this.clientsList
-        .map(c => {
-          const id = c.clientId || c.id || '';
-          const nama = c.name || c.companyName || '';
-          return `<option value="${id}" data-id="${id}" data-name="${nama}">${nama}</option>`;
-        })
-        .join('');
-    }
-
-    const pmSelect = document.getElementById('pmSelect');
-    if (pmSelect && this.employeesList.length > 0) {
-      pmSelect.innerHTML = this.employeesList
-        .map(e => {
-          const id = e.employeeId || e.id || '';
-          const nama = e.namaLengkap || e.name || 'Tanpa Nama';
-          const jabatan = e.namaJabatan || 'Project Manager';
-          return `<option value="${id}" data-name="${nama}">${nama} · ${jabatan}</option>`;
-        })
-        .join('');
-    }
-  },
-
   clearErrors() {
-    ['errProjectName', 'errStartDate', 'errTargetEndDate', 'errPm', 'errModalClientName'].forEach(id => {
+    ['errProjectName', 'errStartDate', 'errTargetEndDate', 'errModalClientName'].forEach(id => {
       const el = document.getElementById(id);
       if (el) {
         el.textContent = '';
@@ -122,18 +108,12 @@ export const FormView = {
 
     document.getElementById('btnSimpanKirim')?.classList.remove('hidden');
 
-    // Sinkronkan nama AM dengan akun aktif di sesi lokal
+    // Sinkronkan nama AM dengan sesi aktif F-1
     const amInput = document.getElementById('amName');
     if (amInput) {
       const user = JSON.parse(localStorage.getItem('user')) || { namaLengkap: 'Fikri Lazuardi Fadilla' };
       amInput.value = user.namaLengkap || 'Fikri Lazuardi Fadilla';
     }
-
-    const startDateInput = document.getElementById('startDate');
-    if (startDateInput) startDateInput.value = '';
-
-    const endDateInput = document.getElementById('targetEndDate');
-    if (endDateInput) endDateInput.value = '';
 
     const dispVal = document.getElementById('indicativeValueDisplay');
     const rawVal = document.getElementById('indicativeValue');
@@ -318,7 +298,7 @@ export const FormView = {
     const payload = {
       projectName: document.getElementById('projectName').value.trim(),
       clientName: clientSelect.selectedOptions[0]?.getAttribute('data-name') || clientSelect.selectedOptions[0]?.text || clientSelect.value,
-      clientId: clientSelect.selectedOptions[0]?.getAttribute('data-id') || clientSelect.value,
+      clientId: clientSelect.value,
       pmEmployeeId: pmSelect.value,
       pmName: pmSelect.selectedOptions[0]?.getAttribute('data-name') || pmSelect.selectedOptions[0]?.text?.split('·')[0]?.trim() || 'Project Manager',
       amName: amNameVal,
@@ -352,7 +332,6 @@ export const FormView = {
   initClientModal(onClientCreated, onError) {
     const modal = document.getElementById('clientModal');
     const openBtn = document.getElementById('btnOpenClientModal');
-    const openBtnCard = document.getElementById('btnOpenClientModalCard');
     const closeBtn = document.getElementById('btnCloseClientModal');
     const cancelBtn = document.getElementById('btnCancelClientModal');
     const saveBtn = document.getElementById('btnSaveClientModal');
@@ -361,10 +340,6 @@ export const FormView = {
       this.clearErrors();
       const clientNameInp = document.getElementById('modalClientName');
       if (clientNameInp) clientNameInp.value = '';
-      const contactInp = document.getElementById('modalClientContact');
-      if (contactInp) {
-        contactInp.value = 'Nadia Putri · 0812 8890 1245';
-      }
       modal?.classList.remove('hidden');
       modal?.classList.add('flex');
     };
@@ -375,7 +350,6 @@ export const FormView = {
     };
 
     openBtn?.addEventListener('click', open);
-    openBtnCard?.addEventListener('click', open);
     closeBtn?.addEventListener('click', close);
     cancelBtn?.addEventListener('click', close);
 
@@ -395,12 +369,11 @@ export const FormView = {
         await this.loadMasterData();
         const clientSelect = document.getElementById('clientSelect');
         if (clientSelect) {
-          const opt = document.createElement('option');
           const cId = newClient.clientId || newClient.tempClientId || name;
           const cName = newClient.companyName || newClient.name || name;
+          const opt = document.createElement('option');
           opt.value = cId;
           opt.textContent = cName;
-          opt.setAttribute('data-id', cId);
           opt.setAttribute('data-name', cName);
           opt.selected = true;
           clientSelect.prepend(opt);
