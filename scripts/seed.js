@@ -1,25 +1,24 @@
-// scripts/seed.js - Inisialisasi Data Awal Basis Data SQLite Prisma D-1
+// scripts/seed.js - Inisialisasi Data Awal Basis Data SQLite Prisma D1 (Mode Offline Kelompok D1)
 const prisma = require('../src/prisma');
 
 const F2_BASE = process.env.F2_API_URL || 'http://localhost:8080';
 
-// Akun AM Aktif (F-1 Auth)
+// 1. Akun AM Tunggal Kelompok D1 (F1 Auth)
 const DEFAULT_AM = {
   akunId: '01929b4a-6e2a-7b3f-8c71-0ab4e3d9f2a1',
-  namaLengkap: 'Fikri Lazuardi Fadilla (AM)'
+  namaLengkap: 'Fikri Lazuardi Fadilla'
 };
 
-// Daftar Default PM (Menggunakan format UUID v7 standar F-2 untuk INT-04)
+// 2. Daftar Default PM Kelompok D1 (Digunakan saat F2 offline)
 const DEFAULT_PMS = [
-  { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a90', namaLengkap: 'Sandy Walsh' },
   { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a01', namaLengkap: 'Haekal Khadafy' },
   { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a02', namaLengkap: 'Rama Sadea Putra' },
   { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a03', namaLengkap: 'Muhammad Yafi Nasrulloh' },
-  { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a04', namaLengkap: 'Fadhilah Aditya Ahmad' },
-  { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a05', namaLengkap: 'Nayara Christony Paul Barriga' }
+  { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a04', namaLengkap: 'Nayara Christony Paul Barriga' },
+  { employeeId: '01929b4a-5f10-7a22-9d44-3c8f1b2e7a05', namaLengkap: 'Fadhilah Aditya Ahmad' }
 ];
 
-// Helper untuk mengambil referensi SDM live jika server F-2 sedang berjalan
+// Helper untuk mengambil referensi SDM live jika server F2 sedang berjalan
 async function fetchEmployeesFromF2() {
   try {
     const controller = new AbortController();
@@ -37,12 +36,12 @@ async function fetchEmployeesFromF2() {
       const result = await res.json();
       const items = result.items || result.data || [];
       if (Array.isArray(items) && items.length > 0) {
-        console.log(`✓ [F-2 LIVE API] Mengambil ${items.length} pegawai live dari F-2.`);
+        console.log(`[F2 LIVE API] Mengambil ${items.length} pegawai live dari F2.`);
         return items;
       }
     }
   } catch (err) {
-    console.log(`ℹ [MODE MANDIRI D-1] Server F-2 offline (${err.message}). Menggunakan daftar PM cadangan.`);
+    console.log(`[MODE MANDIRI D1] Server F2 offline (${err.message}). Menggunakan daftar PM anggota D1.`);
   }
 
   return DEFAULT_PMS;
@@ -55,27 +54,27 @@ async function main() {
   await prisma.temporaryClient.deleteMany({});
   await prisma.project.deleteMany({});
 
-  console.log('--- 2. Memeriksa ketersediaan API hulu F-2 ---');
+  console.log('--- 2. Memeriksa ketersediaan API hulu F2 ---');
   const availablePMs = await fetchEmployeesFromF2();
 
-  const pm1 = availablePMs[0] || DEFAULT_PMS[0];
-  const pm2 = availablePMs[1] || DEFAULT_PMS[1];
-  const pm3 = availablePMs[2] || DEFAULT_PMS[2];
-  const pm4 = availablePMs[3] || DEFAULT_PMS[3];
+  const pm1 = availablePMs[0] || DEFAULT_PMS[0]; // Haekal Khadafy
+  const pm2 = availablePMs[1] || DEFAULT_PMS[1]; // Rama Sadea Putra
+  const pm3 = availablePMs[2] || DEFAULT_PMS[2]; // Muhammad Yafi Nasrulloh
+  const pm4 = availablePMs[3] || DEFAULT_PMS[3]; // Nayara Christony Paul Barriga
 
-  console.log('--- 3. Mengisi data proyek representatif (4 Siklus Status) ---');
+  console.log('--- 3. Mengisi data proyek representatif Kelompok D1 (4 Siklus Status) ---');
 
   const SEED_PROJECTS = [
-    // 1. Proyek Kanonis Acuan Konsumen E-3 & E-5 (Status: REGISTERED, Kode: 202601)
+    // 1. Proyek Kanonis Acuan (Status: REGISTERED, Kode Resmi: 202601)
     {
-      projectId: '01924b1e-7f32-7a81-9b12-45e8a1234567', // ID persis yang diuji kelompok E-3
+      projectId: '01924b1e-7f32-7a81-9b12-45e8a1234567', // ID pengujian konsumen
       canonicalCode: '202601',
-      projectName: 'Modernisasi Gedung Operasional',
-      clientId: 'CL-001',
-      clientName: 'PT Cakra Infrastruktur',
+      projectName: 'Implementasi Sistem ERP Cloud Phase 1',
+      clientId: 'PTFIKRI',
+      clientName: 'PT Fikri Solusi Mandiri',
       amEmployeeId: DEFAULT_AM.akunId,
       amName: DEFAULT_AM.namaLengkap,
-      pmEmployeeId: pm1.employeeId, // UUID v7 standar F-2
+      pmEmployeeId: pm1.employeeId,
       pmName: pm1.namaLengkap,
       startDate: '2026-03-01',
       targetEndDate: '2026-08-31',
@@ -111,10 +110,10 @@ async function main() {
       ]
     },
 
-    // 2. Status UNDER_REVIEW (Dalam Pemeriksaan PM)
+    // 2. Status UNDER_REVIEW (Dalam Pemeriksaan PM, Kode Masih null/—)
     {
       projectId: '01924b1e-7f32-7a81-9b12-45e8a1234002',
-      canonicalCode: '202602',
+      canonicalCode: null,
       projectName: 'Integrasi Sistem Gudang & Otomasi Logistik',
       clientId: 'PTHAEKAL',
       clientName: 'PT Haekal Kreasi Nusantara',
@@ -152,7 +151,7 @@ async function main() {
     // 3. Status REVISI_HANDOVER (Ditolak PM dengan Catatan Wajib)
     {
       projectId: '01924b1e-7f32-7a81-9b12-45e8a1234003',
-      canonicalCode: '202603',
+      canonicalCode: null,
       projectName: 'Revitalisasi Infrastruktur Jaringan Kantor Pusat',
       clientId: 'PTYAFI',
       clientName: 'PT Yafi Digital Dinamika',
@@ -194,7 +193,7 @@ async function main() {
       ]
     },
 
-    // 4. Status DRAFT (Baru Dibuat, Belum Diajukan ke PM)
+    // 4. Status DRAFT (Baru Diinisiasi, Belum Ada Nomor Kode)
     {
       projectId: '01924b1e-7f32-7a81-9b12-45e8a1234004',
       canonicalCode: null,
@@ -251,7 +250,7 @@ async function main() {
     }
   }
 
-  console.log('✓ Seeding basis data berhasil: Proyek acuan E-3 (01924b1e-7f32-7a81-9b12-45e8a1234567) dan 4 status siklus hidup siap diuji.');
+  console.log('Seeding basis data berhasil: 4 status siklus proyek menggunakan data nama anggota Kelompok D1.');
 }
 
 main()

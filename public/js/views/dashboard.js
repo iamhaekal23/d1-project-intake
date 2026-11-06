@@ -9,28 +9,28 @@ export const DashboardView = {
 
   getStatusBadgeHtml(status) {
     if (status === 'REGISTERED') {
-      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">• REGISTERED</span>`;
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-emerald-50 text-emerald-700 border border-emerald-200/60">REGISTERED</span>`;
     }
     if (status === 'UNDER_REVIEW') {
-      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">• UNDER_REVIEW</span>`;
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">UNDER_REVIEW</span>`;
     }
     if (status === 'REVISI_HANDOVER') {
-      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60">• REVISI_HANDOVER</span>`;
+      return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-rose-50 text-rose-700 border border-rose-200/60">REVISI_HANDOVER</span>`;
     }
-    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">• DRAFT</span>`;
+    return `<span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-slate-100 text-slate-600 border border-slate-200">DRAFT</span>`;
   },
 
   getActionButtonHtml(project) {
     if (project.status === 'UNDER_REVIEW') {
-      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Verifikasi</span><span>↗</span></button>`;
+      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Verifikasi</span></button>`;
     }
     if (project.status === 'REVISI_HANDOVER') {
-      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Revisi</span><span>↗</span></button>`;
+      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Revisi</span></button>`;
     }
     if (project.status === 'DRAFT') {
-      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Lanjutkan</span><span>↗</span></button>`;
+      return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Lanjutkan</span></button>`;
     }
-    return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Detail</span><span>↗</span></button>`;
+    return `<button data-detail-id="${project.projectId}" class="text-[#1b365d] hover:text-blue-800 font-bold text-xs inline-flex items-center space-x-1"><span>Detail</span></button>`;
   },
 
   populateAmPmDropdown(allProjects) {
@@ -113,18 +113,13 @@ export const DashboardView = {
 
       const codeHtml = (p.canonicalCode && p.status !== 'DRAFT')
         ? `<span class="font-mono font-bold ${codeColorClass}">${p.canonicalCode}</span>`
-        : `<span class="text-slate-400 font-bold">—</span>`;
-
-      const subText = p.status === 'DRAFT'
-        ? `Draf • diperbarui 18 Feb 2026`
-        : (p.projectName || 'Implementasi & operasional');
+        : `<span class="text-slate-400 font-bold">-</span>`;
 
       return `
         <tr class="${rowBgClass} transition">
           <td class="px-6 py-4 whitespace-nowrap">${codeHtml}</td>
           <td class="px-6 py-4">
             <div class="font-bold text-slate-900 text-xs">${p.projectName}</div>
-            <div class="text-[11px] text-slate-400 mt-0.5">${subText}</div>
           </td>
           <td class="px-6 py-4 text-slate-700 font-medium">${p.clientName || p.clientId}</td>
           <td class="px-6 py-4">
@@ -151,7 +146,7 @@ export const DashboardView = {
 
     const startItem = this.totalItems === 0 ? 0 : (this.currentPage - 1) * this.limit + 1;
     const endItem = Math.min(this.currentPage * this.limit, this.totalItems);
-    infoEl.textContent = `Menampilkan ${startItem}–${endItem} dari ${this.totalItems} proyek`;
+    infoEl.textContent = `Menampilkan ${startItem}-${endItem} dari ${this.totalItems} proyek`;
 
     let html = `<button data-page="${this.currentPage - 1}" ${this.currentPage <= 1 ? 'disabled' : ''} class="px-2 py-1 rounded text-slate-500 hover:bg-slate-100 disabled:opacity-30">&lt;</button>`;
 

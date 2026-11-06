@@ -679,4 +679,55 @@ router.patch('/projects/:projectId/documents-status', async (req, res) => {
   }
 });
 
+// ============================================================================
+// 10. DELETE /api/v1/projects/:projectId - Hapus Draf Proyek (Khusus status DRAFT)
+// ============================================================================
+router.delete('/projects/:projectId', async (req, res) => {
+  try {
+    const { projectId } = req.params;
+
+    // 1. Cari proyek berdasarkan UUID primer atau kode kanonis
+    const project = await prisma.project.findFirst({
+      where: {
+        OR: [
+          { projectId },
+          { canonicalCode: projectId }
+        ]
+      }
+    });
+
+    if (!project) {
+      return sendError(res, 404, 'PROJECT_NOT_FOUND', `Proyek dengan ID ${projectId} tidak ditemukan`);
+    }
+
+    // 2. ATURAN BISNIS: Hanya status DRAFT yang diizinkan untuk dihapus
+    if (project.status !== 'DRAFT') {
+      return sendError(
+        res,
+        400,
+        'CANNOT_DELETE_ACTIVE_PROJECT',
+        `Proyek berstatus ${project.status} tidak dapat dihapus. Hanya proyek berstatus DRAFT yang dapat dibatalkan.`
+      );
+    }
+
+    // 3. Hapus relasi data anak (audit log & dokumen) sebelum menghapus record proyek
+    await prisma.$transaction(async (tx) => {
+      await tx.projectAuditLog.deleteMany({ where: { projectId: project.projectId } });
+      await tx.projectDocument.deleteMany({ where: { projectId: project.projectId } });
+      await tx.project.delete({ where: { projectId: project.projectId } });
+    });
+
+    return res.status(200).json({
+      message: `Draf proyek ${project.canonicalCode || project.projectId} berhasil dihapus permanen`,
+      data: {
+        projectId: project.projectId,
+        canonicalCode: project.canonicalCode,
+        projectName: project.projectName
+      }
+    });
+  } catch (err) {
+    sendError(res, 500, 'INTERNAL_SERVER_ERROR', err.message);
+  }
+});
+
 module.exports = router;

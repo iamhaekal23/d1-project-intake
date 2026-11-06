@@ -92,6 +92,7 @@ export async function approveProject(projectId) {
   });
 }
 
+// 1. Fungsi Tolak Handover PM (Hanya ada 1 kali)
 export async function rejectProject(projectId, notes) {
   return request(`/projects/${encodeURIComponent(projectId)}/reject`, {
     method: 'POST',
@@ -99,6 +100,13 @@ export async function rejectProject(projectId, notes) {
       notes: notes,
       reason: notes 
     })
+  });
+}
+
+// 2. Fungsi Hapus Draf Proyek
+export async function deleteProject(projectId) {
+  return request(`/projects/${encodeURIComponent(projectId)}`, {
+    method: 'DELETE'
   });
 }
 
