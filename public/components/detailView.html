@@ -1,52 +1,50 @@
-<!-- VIEW 3: DETAIL PROYEK & PANEL VERIFIKASI PM (UI-K01-03) -->
+<!--VIEW 3: DETAIL PROYEK & PANEL VERIFIKASI PM (UI-K01-03)-->
 <div id="viewDetail" class="space-y-6">
 
-  <!-- Header Layar: Label Modul, Judul Kode Proyek, Badge Status, & Tombol Kembali -->
+  <!--Header Layar: Label Modul, Judul Kode Proyek, Badge Status, & Tombol Navigasi-->
   <div class="flex flex-col sm:flex-row sm:items-center justify-between gap-4 pb-1">
     <div>
-      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">MODUL D-1 / DETAIL PROYEK</div>
+      <div class="text-[10px] font-bold text-slate-400 uppercase tracking-wider">MODUL D1 / DETAIL PROYEK</div>
       <div class="flex items-center space-x-3 mt-0.5">
-        <h1 id="detailTitle" class="text-2xl font-bold text-slate-900">Kode —</h1>
-        <span id="detailBadgeStatus" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">
-          • UNDER_REVIEW
-        </span>
+        <h1 id="detailTitle" class="text-2xl font-bold text-slate-900">Kode -</h1>
+        <span id="detailBadgeStatus" class="inline-flex items-center px-2.5 py-0.5 rounded-full text-[10px] font-bold bg-amber-50 text-amber-800 border border-amber-200/60">UNDER_REVIEW</span>
       </div>
-      <p id="detailSubtitle" class="text-xs text-slate-500 mt-1">Nama Proyek · Nama Klien</p>
+      <p id="detailSubtitle" class="text-xs text-slate-500 mt-1">Nama Proyek - Nama Klien</p>
     </div>
 
     <div class="flex items-center space-x-3">
-      <!-- Tombol Unduh Project Charter (Hanya Muncul Jika Status REGISTERED) -->
+      <!--Tombol Unduh Project Charter (Hanya Muncul Jika Status REGISTERED)-->
       <button id="btnDownloadCharter" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 hidden">
-        <span>⬇</span>
         <span>Unduh Project Charter</span>
       </button>
 
-      <!-- Tombol Ubah Draf (Muncul jika status DRAFT atau REVISI_HANDOVER) -->
+      <!--Tombol Ubah Draf (Muncul jika status DRAFT atau REVISI_HANDOVER)-->
       <button id="btnEditProject" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 hidden">
-        <span>✎</span>
         <span>Ubah Data Proyek</span>
       </button>
 
+      <!--Tombol Hapus Draf (HANYA MUNCUL JIKA STATUS DRAFT & PERAN AM)-->
+      <button id="btnDeleteProject" class="border border-rose-200 bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-semibold px-3.5 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-1.5 hidden" title="Hapus draf proyek ini">
+        <span>Hapus Draf</span>
+      </button>
+
       <button id="btnBackFromDetail" class="border border-slate-200 bg-white hover:bg-slate-50 text-slate-700 text-xs font-semibold px-4 py-2.5 rounded-lg shadow-sm transition flex items-center space-x-2">
-        <span>←</span>
         <span>Kembali ke Daftar</span>
       </button>
     </div>
   </div>
 
-  <!-- Banner Peringatan Penolakan Revisi PM (Jika Berstatus REVISI_HANDOVER) -->
+  <!--Banner Peringatan Penolakan Revisi PM (Jika Berstatus REVISI_HANDOVER)-->
   <div id="detailRejectionBanner" class="p-4 bg-rose-50 border border-rose-200 rounded-xl flex items-start space-x-3 hidden">
-    <span class="text-rose-600 font-bold text-base leading-none mt-0.5">⚠</span>
     <div>
       <h4 class="text-xs font-bold text-rose-800 uppercase tracking-wider">Handover Ditolak / Perlu Revisi</h4>
       <p id="detailRejectionText" class="text-xs text-rose-700 mt-1 font-medium"></p>
     </div>
   </div>
 
-  <!-- Layout Grid 2 Kolom (Kiri: Info & Dokumen Handover, Kanan: Panel Verifikasi PM & Riwayat) -->
+  <!--Layout Grid 2 Kolom (Kiri: Info & Dokumen Handover, Kanan: Panel Verifikasi PM & Riwayat)-->
   <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 items-start">
-
-    <!-- ==================== KOLOM KIRI (LEBAR 2) ==================== -->
+    <!--KOLOM KIRI-->
     <div class="lg:col-span-2 space-y-6">
 
       <!-- 1. KARTU INFO UMUM -->
@@ -60,27 +58,27 @@
         <div class="grid grid-cols-1 sm:grid-cols-3 gap-y-4 gap-x-6 text-xs">
           <div>
             <span class="text-slate-400 text-[11px] block">Kode</span>
-            <span id="detailCode" class="font-bold text-slate-900 mt-0.5 block">—</span>
+            <span id="detailCode" class="font-bold text-slate-900 mt-0.5 block">-</span>
           </div>
           <div>
             <span class="text-slate-400 text-[11px] block">Klien</span>
-            <span id="detailClient" class="font-bold text-slate-900 mt-0.5 block">—</span>
+            <span id="detailClient" class="font-bold text-slate-900 mt-0.5 block">-</span>
           </div>
           <div>
             <span class="text-slate-400 text-[11px] block">Tanggal Pengajuan</span>
-            <span id="detailSubmissionDate" class="font-semibold text-slate-800 mt-0.5 block">—</span>
+            <span id="detailSubmissionDate" class="font-semibold text-slate-800 mt-0.5 block">-</span>
           </div>
           <div>
-            <span class="text-slate-400 text-[11px] block">AM / Account Manager</span>
-            <span id="detailAm" class="font-semibold text-slate-800 mt-0.5 block">Andi Maulana</span>
+            <span class="text-slate-400 text-[11px] block">Account Manager</span>
+            <span id="detailAm" class="font-semibold text-slate-800 mt-0.5 block">Fikri Lazuardi Fadilla</span>
           </div>
           <div>
-            <span class="text-slate-400 text-[11px] block">PM / Project Manager</span>
-            <span id="detailPm" class="font-semibold text-slate-800 mt-0.5 block">Budi Santoso</span>
+            <span class="text-slate-400 text-[11px] block">Project Manager</span>
+            <span id="detailPm" class="font-semibold text-slate-800 mt-0.5 block">Project Manager</span>
           </div>
           <div>
             <span class="text-slate-400 text-[11px] block">Estimasi Mulai & Selesai</span>
-            <span id="detailDates" class="font-semibold text-slate-800 mt-0.5 block">—</span>
+            <span id="detailDates" class="font-semibold text-slate-800 mt-0.5 block">-</span>
           </div>
         </div>
 
@@ -98,7 +96,7 @@
           <p class="text-[11px] text-slate-400 mt-0.5">WI-01 · RKS, SPK, Kontrak, KAK, SOW & PO</p>
         </div>
 
-        <!-- Kontainer Berkas Dokumen Dinamis (Di-render via detail.js) -->
+        <!-- Kontainer Berkas Dokumen Dinamis -->
         <div id="documentListContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3.5 text-xs">
           <!-- Item RKS, SPK, Kontrak, KAK, SOW & Kartu PO akan dirender dinamis di sini -->
         </div>
@@ -114,7 +112,7 @@
               <span class="text-xs font-bold text-slate-800">Dokumen Lengkap</span>
               <span class="text-[9px] font-bold uppercase tracking-wider bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded border border-slate-200">MANUAL</span>
             </div>
-            <p class="text-[11px] text-slate-400 mt-0.5">documents_complete · Ditandai manual oleh AM; tidak menghapus kewajiban unggah PO untuk penagihan E-2.</p>
+            <p class="text-[11px] text-slate-400 mt-0.5">Ditandai manual oleh AM, tidak menghapus kewajiban unggah PO untuk penagihan E2.</p>
           </div>
         </div>
 
@@ -123,8 +121,7 @@
       <!-- 3. BANNER PERINGATAN PROTEKSI PO FISIK BELUM DIUNGGAH -->
       <div id="poWarningBanner" class="p-4 bg-[#fef9ee] border border-amber-200 rounded-xl space-y-1">
         <div class="flex items-center space-x-2 text-amber-800 font-bold text-xs">
-          <span>⚠</span>
-          <span>PO fisik belum diunggah. Tagihan di E-2 terblokir hingga PO diunggah.</span>
+          <span>PO fisik belum diunggah. Tagihan di E2 terblokir hingga PO diunggah.</span>
         </div>
         <p class="text-[11px] text-amber-700 pl-4 leading-relaxed">
           Blokir penagihan berlaku terpisah dari status registrasi dan Dokumen Lengkap.
@@ -133,13 +130,13 @@
 
     </div>
 
-    <!-- ==================== KOLOM KANAN (LEBAR 1) ==================== -->
+    <!--KOLOM KANAN-->
     <div class="space-y-6">
 
-      <!-- 1. PANEL VERIFIKASI PM -->
+      <!--1. PANEL VERIFIKASI PM-->
       <div class="bg-white rounded-xl border border-slate-200/90 shadow-sm p-6 space-y-5">
         
-        <!-- Header Panel Verifikasi -->
+        <!--Header Panel Verifikasi-->
         <div class="flex items-start space-x-3">
           <div class="w-8 h-8 rounded-lg bg-slate-100 text-slate-600 flex items-center justify-center shrink-0">
             <svg class="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2">
@@ -147,39 +144,39 @@
             </svg>
           </div>
           <div>
-            <h3 class="text-xs font-bold text-slate-900">Panel Verifikasi PM</h3>
+            <h3 class="text-xs font-bold text-slate-900">Panel Verifikasi Project Manager</h3>
             <p class="text-[11px] text-slate-400 mt-0.5">Tinjau handover sebelum registrasi.</p>
           </div>
         </div>
 
-        <!-- Box Profil PM Penerima -->
+        <!--Box Profil PM Penerima-->
         <div class="bg-slate-50/80 p-3 rounded-xl border border-slate-100 flex items-center space-x-3">
           <div id="panelPmAvatar" class="w-8 h-8 rounded-lg bg-slate-200 text-slate-700 text-xs font-bold flex items-center justify-center shrink-0">
             PM
           </div>
           <div>
-            <div id="panelPmName" class="text-xs font-bold text-slate-900 leading-tight">Budi Santoso</div>
-            <div class="text-[10px] text-slate-400">PM Tujuan · F-2</div>
+            <div id="panelPmName" class="text-xs font-bold text-slate-900 leading-tight">Project Manager</div>
+            <div class="text-[10px] text-slate-400">PM Tujuan</div>
           </div>
         </div>
 
-        <!-- 3 Butir Checklist Persyaratan Kesiapan -->
+        <!--Checklist Persyaratan Kesiapan-->
         <div class="space-y-2 text-xs">
           <div class="flex items-center space-x-2 text-slate-700">
             <span class="text-emerald-600 font-bold">✓</span>
             <span class="text-[11px]">Informasi proyek tersedia</span>
           </div>
           <div class="flex items-center space-x-2 text-slate-700">
-            <span id="chkDocCountIcon" class="text-emerald-600 font-bold">✓</span>
-            <span class="text-[11px]" id="chkDocCountText">5 dokumen WI-01 diunggah</span>
+            <span class="text-emerald-600 font-bold">✓</span>
+            <span class="text-[11px]">5 dokumen WI-01 diunggah</span>
           </div>
           <div class="flex items-center space-x-2 text-slate-700">
             <span id="chkManualCompleteIcon" class="text-emerald-600 font-bold">✓</span>
-            <span class="text-[11px]" id="chkManualCompleteText">Kelengkapan ditandai manual</span>
+            <span class="text-[11px]">Kelengkapan ditandai manual</span>
           </div>
         </div>
 
-        <!-- Area Catatan Revisi PM (Wajib Min. 20 Karakter Jika Tolak) -->
+        <!--Area Catatan Revisi PM (Min. 20 Karakter Jika Tolak)-->
         <div class="space-y-1.5 pt-1">
           <label class="block text-xs font-bold text-slate-700">
             Catatan Revisi PM (Min. 20 karakter) <span class="text-rose-500">*</span>
@@ -191,14 +188,20 @@
           </div>
         </div>
 
-        <!-- Tombol Aksi Verifikasi PM -->
+        <!-- Tombol Aksi Verifikasi PM & Handover AM -->
         <div class="space-y-2.5 pt-2">
-          <button type="button" id="btnApprovePM" class="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-2">
-            <span>✓</span>
+          <!-- Tombol Handover AM (Muncul saat DRAFT atau REVISI_HANDOVER) -->
+          <button type="button" id="btnSubmitHandover" class="w-full py-2.5 rounded-xl bg-[#152a4a] hover:bg-[#0f1f38] text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-2 hidden">
+            <span>Ajukan Serah Terima ke PM</span>
+          </button>
+
+          <!-- Tombol Aksi Persetujuan PM (Muncul saat UNDER_REVIEW) -->
+          <button type="button" id="btnApprovePM" class="w-full py-2.5 rounded-xl bg-emerald-700 hover:bg-emerald-800 text-white text-xs font-bold shadow-sm transition flex items-center justify-center space-x-2 hidden">
             <span>Terima & Registrasi Proyek</span>
           </button>
-          <button type="button" id="btnRejectPM" class="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition flex items-center justify-center space-x-2">
-            <span>↺</span>
+
+          <!-- Tombol Penolakan Revisi PM (Muncul saat UNDER_REVIEW) -->
+          <button type="button" id="btnRejectPM" class="w-full py-2.5 rounded-xl bg-rose-50 hover:bg-rose-100 text-rose-700 text-xs font-bold border border-rose-200 transition flex items-center justify-center space-x-2 hidden">
             <span>Tolak (Butuh Revisi)</span>
           </button>
         </div>
@@ -221,6 +224,27 @@
 
     </div>
 
+  </div>
+
+  <!-- Modal Konfirmasi Hapus Draf (Simpel & Bersih) -->
+  <div id="deleteConfirmModal" class="fixed inset-0 z-50 flex items-center justify-center bg-slate-900/30 hidden">
+    <div class="bg-white rounded-xl shadow-xl max-w-sm w-full mx-4 p-5 space-y-4 border border-slate-100">
+      <div>
+        <h3 class="text-sm font-bold text-slate-900">Hapus draf proyek?</h3>
+        <p class="text-xs text-slate-500 mt-2 leading-relaxed">
+          Draf proyek <span id="deleteModalProjectName" class="font-semibold text-slate-800"></span> akan dihapus permanen dari sistem. Tindakan ini tidak dapat dibatalkan.
+        </p>
+      </div>
+
+      <div class="flex items-center justify-end space-x-2 pt-1">
+        <button type="button" id="btnCancelDeleteModal" class="px-3.5 py-1.5 rounded-lg text-xs font-medium text-slate-600 hover:bg-slate-100 transition">
+          Batal
+        </button>
+        <button type="button" id="btnConfirmDeleteModal" class="px-3.5 py-1.5 rounded-lg bg-rose-600 hover:bg-rose-700 text-white text-xs font-semibold shadow-sm transition">
+          Hapus
+        </button>
+      </div>
+    </div>
   </div>
 
 </div>
